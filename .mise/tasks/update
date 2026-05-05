@@ -94,13 +94,13 @@ maybe_commit_updates() {
   msg="$(commit_message)"
 
   if [ "${usage_commit:-}" = "true" ]; then
-    git -C "$TARGET_DIR" commit -m "$msg"
+    git -C "$TARGET_DIR" commit -m "$msg" --only -- "$MANIFEST_REL"
     return 0
   fi
 
   if [ -t 0 ] && [ -t 1 ] && [ -z "${BATS_TEST_NAME:-}" ] && [ -z "${CI:-}" ]; then
     if gum confirm "Commit module manifest update now?"; then
-      git -C "$TARGET_DIR" commit -m "$msg"
+      git -C "$TARGET_DIR" commit -m "$msg" --only -- "$MANIFEST_REL"
       return 0
     fi
   fi

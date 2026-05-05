@@ -78,6 +78,29 @@ setup() {
   [ -z "$output" ]
 }
 
+@test "update --commit leaves unrelated staged changes alone" {
+  modules add "$REMOTE" --name my-repo
+  git -C "$PARENT" commit -m "add module"
+
+  echo "unrelated" > "$PARENT/unrelated.txt"
+  git -C "$PARENT" add unrelated.txt
+
+  echo "committed change" > "$REMOTE/committed.md"
+  git -C "$REMOTE" add committed.md
+  git -C "$REMOTE" commit -m "committed update"
+
+  run modules update my-repo --commit
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"deps: update my-repo module pin"* ]]
+
+  run git -C "$PARENT" status --short
+  [[ "$output" == *"A  unrelated.txt"* ]]
+
+  run git -C "$PARENT" show --name-only --format= HEAD
+  [[ "$output" == *".modules/manifest"* ]]
+  [[ "$output" != *"unrelated.txt"* ]]
+}
+
 @test "update reports already up to date" {
   modules add "$REMOTE" --name my-repo
 
