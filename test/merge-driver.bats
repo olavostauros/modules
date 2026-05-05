@@ -189,7 +189,7 @@ set_pin() {
 
 # ── Integrity: the driver never produces corrupt JSON-style output ───
 
-@test "merge: result is always valid TSV (sorted, 3 columns per line)" {
+@test "merge: result is always valid TSV (sorted, 3 or 4 columns per line)" {
   modules add "$REMOTE_A" --name alpha
   modules add "$REMOTE_B" --name beta
   git -C "$PARENT" commit -q -m "seed"
@@ -209,9 +209,10 @@ set_pin() {
 
   git -C "$PARENT" merge --no-edit branch-a
 
-  # All lines should have exactly 3 tab-separated fields
+  # All lines should have exactly 3 tab-separated fields, or 4 when a
+  # tracking ref is present.
   local bad
-  bad="$(awk -F'\t' 'NF != 3' "$PARENT/.modules/manifest" || true)"
+  bad="$(awk -F'\t' 'NF != 3 && NF != 4' "$PARENT/.modules/manifest" || true)"
   [ -z "$bad" ]
 
   # Sorted by column 1

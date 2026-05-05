@@ -33,7 +33,7 @@ setup() {
 @test "add records entry in manifest" {
   modules add "$REMOTE"
 
-  # Manifest is TSV: <name>\t<url>\t<pin>
+  # Manifest is TSV: <name>\t<url>\t<pin>[\t<track>]
   manifest_has_name "$PARENT/.modules/manifest" "remote"
 
   local url pin expected
@@ -43,12 +43,28 @@ setup() {
   expected="$(repo_head "$REMOTE")"
   [ "$pin" = "$expected" ]
 
-  # Manifest line should have exactly 3 tab-separated fields
+  # Untracked manifest line should have exactly 3 tab-separated fields
   local line
   line="$(manifest_line_of "$PARENT/.modules/manifest" "remote")"
   local fields
   fields="$(echo -n "$line" | awk -F'\t' '{print NF}')"
   [ "$fields" = "3" ]
+}
+
+@test "add with --track records tracking ref" {
+  modules add "$REMOTE" --name tracked --track main
+
+  local pin track expected
+  pin="$(manifest_pin_of "$PARENT/.modules/manifest" "tracked")"
+  track="$(manifest_track_of "$PARENT/.modules/manifest" "tracked")"
+  expected="$(repo_head "$REMOTE")"
+  [ "$pin" = "$expected" ]
+  [ "$track" = "main" ]
+
+  local line fields
+  line="$(manifest_line_of "$PARENT/.modules/manifest" "tracked")"
+  fields="$(echo -n "$line" | awk -F'\t' '{print NF}')"
+  [ "$fields" = "4" ]
 }
 
 @test "add stages manifest only (no gitlink, modules/ is gitignored)" {

@@ -14,22 +14,29 @@ if [ "$(manifest_count)" -eq 0 ]; then
 fi
 
 {
-  printf "Name\tStatus\tPin\n"
-  while IFS=$'\t' read -r name url pin; do
+  printf "Name\tStatus\tPin\tTrack\n"
+  while IFS=$'\t' read -r name url pin track; do
     [ -z "$name" ] && continue
+    track="${track:-}"
     mod_path="$(module_path "$name")"
+    track_display="-"
+    if [ -n "$track" ]; then
+      track_display="$track"
+    fi
 
     if [ ! -d "$mod_path/.git" ]; then
-      printf "%s\tmissing\t-\n" "$name"
+      printf "%s\tmissing\t-\t%s\n" "$name" "$track_display"
       continue
     fi
 
     actual="$(git -C "$mod_path" rev-parse HEAD)"
 
     if [ "$actual" = "$pin" ]; then
-      printf "%s\t✓ at pin\t%.12s\n" "$name" "$pin"
+      printf "%s\t✓ at pin\t%.12s\t%s\n" "$name" "$pin" "$track_display"
+    elif [ -n "$track" ]; then
+      printf "%s\ttracking %.12s\t%.12s → %.12s\t%s\n" "$name" "$track" "$pin" "$actual" "$track_display"
     else
-      printf "%s\tchanged\t%.12s → %.12s\n" "$name" "$pin" "$actual"
+      printf "%s\tchanged\t%.12s → %.12s\t%s\n" "$name" "$pin" "$actual" "$track_display"
     fi
   done < "$MANIFEST"
 } | gum table --print --separator "	"

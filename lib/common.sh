@@ -111,7 +111,11 @@ module_path() {
 # ── Manifest operations ──────────────────────────────────────
 #
 # Manifest format: tab-separated lines, sorted by name.
-#   <name>\t<url>\t<pin>\n
+#   <name>\t<url>\t<pin>[\t<track>]\n
+#
+# The optional fourth field is a tracking ref. Pins remain the durable
+# recorded state; tracking refs let selected modules refresh their local
+# gitignored clone during init without dirtying the parent repo.
 #
 # Line-oriented form lets us use a trivial union merge driver (adapted
 # from KnickKnackLabs/notes) for concurrent edits. See
@@ -164,19 +168,39 @@ manifest_pin() {
   manifest_get "$name" | cut -f3
 }
 
+# Print the optional tracking ref for a name (empty if untracked).
+manifest_track() {
+  local name="$1"
+  manifest_get "$name" | cut -f4
+}
+
+# True (0) if the manifest exists and is not git-crypt ciphertext.
+manifest_is_readable() {
+  [ -f "$MANIFEST" ] || return 1
+  if [ ! -s "$MANIFEST" ]; then
+    return 0
+  fi
+
+  # git-crypt files begin with \0 G I T C R Y P T \0. Bash strings cannot
+  # contain the leading NUL, so read bytes 2-9 and compare the ASCII marker.
+  local header
+  header=$(dd if="$MANIFEST" bs=1 skip=1 count=8 2>/dev/null)
+  [ "$header" != "GITCRYPT" ]
+}
+
 # Insert or update an entry.
-# Usage: manifest_set <name> <url> <pin>
+# Usage: manifest_set <name> <url> <pin> [track]
 manifest_set() {
-  local name="$1" url="$2" pin="$3"
+  local name="$1" url="$2" pin="$3" track="${4:-}"
 
   # Validate: no tabs (our delimiter) or newlines (our record separator)
   # in any field. Either would split one entry across lines/columns and
   # corrupt the manifest's keyed-on-name logic.
-  if [[ "$name" == *$'\t'* || "$url" == *$'\t'* || "$pin" == *$'\t'* ]]; then
+  if [[ "$name" == *$'\t'* || "$url" == *$'\t'* || "$pin" == *$'\t'* || "$track" == *$'\t'* ]]; then
     echo "Error: manifest fields must not contain tab characters" >&2
     return 1
   fi
-  if [[ "$name" == *$'\n'* || "$url" == *$'\n'* || "$pin" == *$'\n'* ]]; then
+  if [[ "$name" == *$'\n'* || "$url" == *$'\n'* || "$pin" == *$'\n'* || "$track" == *$'\n'* ]]; then
     echo "Error: manifest fields must not contain newline characters" >&2
     return 1
   fi
@@ -188,7 +212,11 @@ manifest_set() {
       awk -F'\t' -v n="$name" '$1 != n' "$MANIFEST"
     fi
     # Append new entry
-    printf '%s\t%s\t%s\n' "$name" "$url" "$pin"
+    if [ -n "$track" ]; then
+      printf '%s\t%s\t%s\t%s\n' "$name" "$url" "$pin" "$track"
+    else
+      printf '%s\t%s\t%s\n' "$name" "$url" "$pin"
+    fi
   } | sort -t$'\t' -k1,1 > "$tmp"
   mv "$tmp" "$MANIFEST"
 }

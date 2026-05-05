@@ -67,6 +67,9 @@ setup() {
 
   run manifest_set 'ok' 'https://example.com' $'dead\tbeef'
   [ "$status" -ne 0 ]
+
+  run manifest_set 'ok' 'https://example.com' 'deadbeef' $'main\textra'
+  [ "$status" -ne 0 ]
 }
 
 @test "manifest_set rejects newlines in any field" {
@@ -82,5 +85,8 @@ setup() {
   [ "$status" -ne 0 ]
 
   run manifest_set 'ok' 'https://example.com' $'dead\nbeef'
+  [ "$status" -ne 0 ]
+
+  run manifest_set 'ok' 'https://example.com' 'deadbeef' $'main\nmalicious'
   [ "$status" -ne 0 ]
 }

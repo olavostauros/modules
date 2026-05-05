@@ -32,10 +32,50 @@ setup() {
   run modules update my-repo
   [ "$status" -eq 0 ]
   [[ "$output" == *"updated"* ]]
+  [[ "$output" == *"Manifest changes staged"* ]]
 
   local new_pin
   new_pin="$(manifest_pin_of "$PARENT/.modules/manifest" "my-repo")"
   [ "$old_pin" != "$new_pin" ]
+}
+
+@test "update tracked module advances pin from tracked ref and preserves track" {
+  modules add "$REMOTE" --name tracked --track main
+  git -C "$PARENT" commit -m "add tracked module"
+
+  local old_pin
+  old_pin="$(manifest_pin_of "$PARENT/.modules/manifest" "tracked")"
+
+  echo "tracked change" > "$REMOTE/tracked.md"
+  git -C "$REMOTE" add tracked.md
+  git -C "$REMOTE" commit -m "tracked update"
+
+  run modules update tracked
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"tracking main"* ]]
+  [[ "$output" == *"updated"* ]]
+
+  local new_pin track
+  new_pin="$(manifest_pin_of "$PARENT/.modules/manifest" "tracked")"
+  track="$(manifest_track_of "$PARENT/.modules/manifest" "tracked")"
+  [ "$old_pin" != "$new_pin" ]
+  [ "$track" = "main" ]
+}
+
+@test "update --commit commits manifest changes" {
+  modules add "$REMOTE" --name my-repo
+  git -C "$PARENT" commit -m "add module"
+
+  echo "committed change" > "$REMOTE/committed.md"
+  git -C "$REMOTE" add committed.md
+  git -C "$REMOTE" commit -m "committed update"
+
+  run modules update my-repo --commit
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"deps: update my-repo module pin"* ]]
+
+  run git -C "$PARENT" status --short
+  [ -z "$output" ]
 }
 
 @test "update reports already up to date" {
@@ -86,6 +126,27 @@ setup() {
   run modules update my-repo
   [ "$status" -eq 0 ]
   [[ "$output" == *"updated"* ]]
+}
+
+@test "update ignores stale local branch and uses default branch" {
+  modules add "$REMOTE" --name my-repo
+  git -C "$PARENT" commit -m "add module"
+
+  git -C "$PARENT/modules/my-repo" checkout -b stale-local
+
+  echo "default branch change" > "$REMOTE/default.md"
+  git -C "$REMOTE" add default.md
+  git -C "$REMOTE" commit -m "default update"
+  local latest
+  latest="$(repo_head "$REMOTE")"
+
+  run modules update my-repo
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"updated"* ]]
+
+  local actual
+  actual="$(repo_head "$PARENT/modules/my-repo")"
+  [ "$actual" = "$latest" ]
 }
 
 @test "update all reports failure when a module fails" {

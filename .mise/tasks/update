@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
-#MISE description="Pull latest and update pin for module(s)"
+#MISE description="Pull latest, update module pin(s), and optionally commit"
 #MISE dir="{{config_root}}"
 #USAGE arg "[name]" help="Module name (omit to update all)"
+#USAGE flag "--commit" help="Commit manifest pin changes after updating"
 set -euo pipefail
 
 source "$MISE_CONFIG_ROOT/lib/common.sh"
@@ -9,40 +10,49 @@ source "$MISE_CONFIG_ROOT/lib/common.sh"
 require_git
 require_initialized
 
-update_module() {
+CHANGED_COUNT=0
+CHANGED_NAMES=""
+
+record_changed() {
   local name="$1"
-  if ! manifest_has "$name"; then
-    echo "Error: module '$name' not found" >&2
-    return 1
+  CHANGED_COUNT=$((CHANGED_COUNT + 1))
+  if [ -z "$CHANGED_NAMES" ]; then
+    CHANGED_NAMES="$name"
+  else
+    CHANGED_NAMES="$CHANGED_NAMES, $name"
   fi
+}
 
-  local url pin
-  url="$(manifest_url "$name")"
-  pin="$(manifest_pin "$name")"
-  local mod_path
-  mod_path="$(module_path "$name")"
-
-  if [ ! -d "$mod_path/.git" ]; then
-    echo "  $name: not cloned (run: modules init)" >&2
-    return 1
-  fi
-
-  echo "  $name: pulling..."
-
-  if ! git -C "$mod_path" symbolic-ref -q HEAD &>/dev/null; then
-    local default_branch
-    default_branch="$(git -C "$mod_path" rev-parse --abbrev-ref origin/HEAD 2>/dev/null | sed 's|^origin/||')"
-    if [ -z "$default_branch" ] || [ "$default_branch" = "HEAD" ]; then
-      if git -C "$mod_path" show-ref --verify --quiet refs/remotes/origin/main; then
-        default_branch="main"
-      elif git -C "$mod_path" show-ref --verify --quiet refs/remotes/origin/master; then
-        default_branch="master"
-      else
-        echo "  $name: cannot determine default branch" >&2
-        return 1
-      fi
+default_branch_for() {
+  local mod_path="$1" default_branch
+  default_branch="$(git -C "$mod_path" rev-parse --abbrev-ref origin/HEAD 2>/dev/null | sed 's|^origin/||')"
+  if [ -z "$default_branch" ] || [ "$default_branch" = "HEAD" ]; then
+    if git -C "$mod_path" show-ref --verify --quiet refs/remotes/origin/main; then
+      default_branch="main"
+    elif git -C "$mod_path" show-ref --verify --quiet refs/remotes/origin/master; then
+      default_branch="master"
+    else
+      return 1
     fi
-    if ! git -C "$mod_path" checkout -q "$default_branch" 2>&1; then
+  fi
+  echo "$default_branch"
+}
+
+sync_untracked_module() {
+  local name="$1" mod_path="$2" default_branch
+
+  if ! git -C "$mod_path" fetch -q origin 2>&1; then
+    echo "  $name: fetch failed" >&2
+    return 1
+  fi
+
+  if ! default_branch="$(default_branch_for "$mod_path")"; then
+    echo "  $name: cannot determine default branch" >&2
+    return 1
+  fi
+
+  if ! git -C "$mod_path" checkout -q "$default_branch" 2>&1; then
+    if ! git -C "$mod_path" checkout -q -b "$default_branch" "origin/$default_branch" 2>&1; then
       echo "  $name: failed to checkout $default_branch" >&2
       return 1
     fi
@@ -52,6 +62,78 @@ update_module() {
     echo "  $name: pull failed" >&2
     return 1
   fi
+}
+
+sync_tracked_module() {
+  local name="$1" mod_path="$2" track="$3"
+
+  if ! git -C "$mod_path" fetch -q origin "$track" 2>&1; then
+    echo "  $name: failed to fetch tracked ref '$track'" >&2
+    return 1
+  fi
+  if ! git -C "$mod_path" checkout -q FETCH_HEAD 2>&1; then
+    echo "  $name: failed to checkout tracked ref '$track'" >&2
+    return 1
+  fi
+}
+
+commit_message() {
+  if [ "$CHANGED_COUNT" -eq 1 ]; then
+    printf 'deps: update %s module pin\n' "$CHANGED_NAMES"
+  else
+    printf 'deps: update module pins\n'
+  fi
+}
+
+maybe_commit_updates() {
+  if [ "$CHANGED_COUNT" -eq 0 ]; then
+    return 0
+  fi
+
+  local msg
+  msg="$(commit_message)"
+
+  if [ "${usage_commit:-}" = "true" ]; then
+    git -C "$TARGET_DIR" commit -m "$msg"
+    return 0
+  fi
+
+  if [ -t 0 ] && [ -t 1 ] && [ -z "${BATS_TEST_NAME:-}" ] && [ -z "${CI:-}" ]; then
+    if gum confirm "Commit module manifest update now?"; then
+      git -C "$TARGET_DIR" commit -m "$msg"
+      return 0
+    fi
+  fi
+
+  echo "Manifest changes staged. Commit with: git commit -m \"$msg\""
+}
+
+update_module() {
+  local name="$1"
+  if ! manifest_has "$name"; then
+    echo "Error: module '$name' not found" >&2
+    return 1
+  fi
+
+  local url pin track
+  url="$(manifest_url "$name")"
+  pin="$(manifest_pin "$name")"
+  track="$(manifest_track "$name")"
+  local mod_path
+  mod_path="$(module_path "$name")"
+
+  if [ ! -d "$mod_path/.git" ]; then
+    echo "  $name: not cloned (run: modules init)" >&2
+    return 1
+  fi
+
+  if [ -n "$track" ]; then
+    echo "  $name: tracking $track..."
+    sync_tracked_module "$name" "$mod_path" "$track" || return 1
+  else
+    echo "  $name: pulling default branch..."
+    sync_untracked_module "$name" "$mod_path" || return 1
+  fi
 
   local new_pin
   new_pin="$(git -C "$mod_path" rev-parse HEAD)"
@@ -59,8 +141,9 @@ update_module() {
   if [ "$new_pin" = "$pin" ]; then
     echo "  $name: already up to date (${pin:0:12})"
   else
-    manifest_set "$name" "$url" "$new_pin"
+    manifest_set "$name" "$url" "$new_pin" "$track"
     git -C "$TARGET_DIR" add "$MANIFEST"
+    record_changed "$name"
     echo "  $name: updated ${pin:0:12} → ${new_pin:0:12}"
   fi
 }
@@ -79,3 +162,5 @@ else
     exit 1
   fi
 fi
+
+maybe_commit_updates

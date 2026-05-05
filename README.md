@@ -8,7 +8,7 @@ Manage repo-level dependencies with an encrypted manifest and a gitignored clone
 A public observer sees only 'this repo uses modules' — no names, no pinned commits, no count.
 
 ![lang: bash](https://img.shields.io/badge/lang-bash-4EAA25?style=flat&logo=gnubash&logoColor=white)
-[![tests: 92 passing](https://img.shields.io/badge/tests-92%20passing-brightgreen?style=flat)](test/)
+[![tests: 105 passing](https://img.shields.io/badge/tests-105%20passing-brightgreen?style=flat)](test/)
 ![License: MIT](https://img.shields.io/badge/License-MIT-blue?style=flat)
 
 </div>
@@ -42,6 +42,10 @@ modules setup --path deps --gpg-key <your-fingerprint>
 modules add https://github.com/org/repo.git --name my-dep
 git commit -m "add my-dep"
 
+# Add a dependency that should refresh from main during init
+modules add https://github.com/org/shared-notes.git --name shared-notes --track main
+git commit -m "add tracked shared-notes module"
+
 # See what you have
 modules list
 modules status
@@ -57,7 +61,7 @@ Locally, after `modules unlock && modules init`:
 ```
   your-repo/
   ├── .modules/
-  │   ├── manifest       ← encrypted TSV (name\turl\tpin)
+  │   ├── manifest       ← encrypted TSV (name\turl\tpin[\ttrack])
   │   └── config         ← plaintext JSON ({"path": "modules"})
   ├── modules/          ← gitignored; real git clones live here
   │   ├── fold/
@@ -79,8 +83,9 @@ What a public observer sees on GitHub (locked):
 ```
 
 - **No gitlinks** — nothing under the clone directory is tracked by git. No pinned commit SHAs leak.
-- **Encrypted manifest** — `.modules/manifest` holds all submodule state (name, URL, pin). `modules setup` initializes [rudi](https://github.com/KnickKnackLabs/rudi) when needed and assigns the manifest to git-crypt.
+- **Encrypted manifest** — `.modules/manifest` holds all submodule state (name, URL, pin, and optional tracking ref). `modules setup` initializes [rudi](https://github.com/KnickKnackLabs/rudi) when needed and assigns the manifest to git-crypt.
 - **Readable names on disk** — no hashing. `cd modules/fold` just works.
+- **Optional branch tracking** — modules added with `--track main` refresh their local clone during `modules init` without updating the recorded pin. Use `modules update` when you want to advance and stage the durable pin.
 - **Custom clone root** — `modules setup --path deps` picks a different location (e.g., `deps/`, `third-party/vendored/`). Stored in `.modules/config`.
 - **Merge-safe manifest** — a git-crypt-aware merge driver handles concurrent pin bumps without corrupting the manifest. Installed by default.
 
@@ -88,19 +93,19 @@ What a public observer sees on GitHub (locked):
 
 ## Commands
 
-| Command                                             | Description                                                               |
-| --------------------------------------------------- | ------------------------------------------------------------------------- |
-| `modules add <url> [--name] [--ref]`                | Add a submodule                                                           |
-| `modules init`                                      | Clone and checkout all modules from the manifest                          |
-| `modules install-hooks`                             | Install git merge driver for the modules manifest                         |
-| `modules list [--json]`                             | List modules                                                              |
-| `modules lock`                                      | Lock encrypted manifest (re-encrypt on disk)                              |
-| `modules merge-driver <ancestor> <current> <other>` | Custom git merge driver for .modules/manifest (invoked by git, not users) |
-| `modules remove <name>`                             | Remove a module                                                           |
-| `modules setup [--path] [--gpg-key <fingerprint>]`  | Initialize modules, encryption, hooks, and merge driver                   |
-| `modules status`                                    | Show status of all modules                                                |
-| `modules unlock`                                    | Unlock encrypted manifest using your GPG key                              |
-| `modules update [name]`                             | Pull latest and update pin for module(s)                                  |
+| Command                                                           | Description                                                               |
+| ----------------------------------------------------------------- | ------------------------------------------------------------------------- |
+| `modules add <url> [--name <name>] [--ref <ref>] [--track <ref>]` | Add a submodule                                                           |
+| `modules init`                                                    | Clone modules and refresh tracked clones from their ref                   |
+| `modules install-hooks`                                           | Install git merge driver for the modules manifest                         |
+| `modules list [--json]`                                           | List modules                                                              |
+| `modules lock`                                                    | Lock encrypted manifest (re-encrypt on disk)                              |
+| `modules merge-driver <ancestor> <current> <other>`               | Custom git merge driver for .modules/manifest (invoked by git, not users) |
+| `modules remove <name>`                                           | Remove a module                                                           |
+| `modules setup [--path <path>] [--gpg-key <fingerprint>]`         | Initialize modules in the current repo                                    |
+| `modules status`                                                  | Show status of all modules                                                |
+| `modules unlock`                                                  | Unlock encrypted manifest using your GPG key                              |
+| `modules update [name] [--commit]`                                | Pull latest, update module pin(s), and optionally commit                  |
 
 <br />
 
@@ -112,7 +117,7 @@ cd modules && mise trust && mise install
 mise run test
 ```
 
-**92 tests** across 12 suites, using [BATS](https://github.com/bats-core/bats-core). All tests use local git repos in temp directories — no network, no external dependencies.
+**105 tests** across 13 suites, using [BATS](https://github.com/bats-core/bats-core). All tests use local git repos in temp directories — no network, no external dependencies.
 
 The `git-mechanics` suite verifies git's behavior around gitignored nested repos. The `merge-driver` suite simulates concurrent pin bumps to validate the manifest merge logic. The `roundtrip` suite drives the full setup → add → lock → fresh-clone → unlock → init path end-to-end with git-crypt.
 
@@ -123,10 +128,10 @@ modules/
 ├── .mise/tasks/
 │   ├── setup           # Initialize manifest, config, gitignore, hooks, merge driver
 │   ├── add             # Clone into modules/<name>, record in manifest
-│   ├── init            # Populate all modules from the manifest
+│   ├── init            # Populate modules; refresh tracked clones from their ref
 │   ├── list            # Show modules (table or --json)
 │   ├── status          # Show at-pin / changed / missing
-│   ├── update          # Pull latest, update pinned SHA
+│   ├── update          # Pull latest, update pinned SHA, optionally commit
 │   ├── remove          # Clean removal of clone + manifest entry
 │   ├── lock / unlock   # Wrappers around rudi lock / unlock
 │   ├── install-hooks   # Register the merge driver (called by setup)

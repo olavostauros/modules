@@ -40,6 +40,16 @@ setup() {
   echo "$output" | jq -e '.["my-repo"].url' >/dev/null
 }
 
+@test "list --json includes track when present" {
+  modules add "$REMOTE" --name tracked --track main
+  run modules list --json
+  [ "$status" -eq 0 ]
+
+  local track
+  track="$(echo "$output" | jq -r '.tracked.track')"
+  [ "$track" = "main" ]
+}
+
 @test "list --json escapes quotes/backslashes in URLs safely" {
   # Write a manifest line by hand with a URL containing a double-quote and
   # a backslash — exactly the shape that broke the old awk-based encoder.

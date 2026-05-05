@@ -49,3 +49,18 @@ setup() {
   [ "$status" -eq 0 ]
   [[ "$output" == *"missing"* ]]
 }
+
+@test "status shows tracking ref" {
+  modules add "$REMOTE" --name tracked --track main
+
+  echo "new" > "$REMOTE/new.md"
+  git -C "$REMOTE" add new.md
+  git -C "$REMOTE" commit -m "new commit"
+  modules init
+
+  run modules status
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"tracked"* ]]
+  [[ "$output" == *"main"* ]]
+  [[ "$output" == *"tracking"* ]]
+}

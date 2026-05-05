@@ -1,10 +1,17 @@
 #!/usr/bin/env bash
 #MISE description="Unlock encrypted manifest using your GPG key"
-set -eo pipefail
+set -euo pipefail
 
 source "$MISE_CONFIG_ROOT/lib/common.sh"
 
 require_git
+require_initialized
+
+if manifest_is_readable; then
+  echo "Manifest already unlocked."
+  exit 0
+fi
+
 require_rudi
 
 cd "$TARGET_DIR"
