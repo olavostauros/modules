@@ -28,7 +28,7 @@ setup() {
   # release version without the merge-driver task — rewrite the config to
   # point at the local driver script so tests exercise the in-tree code.
   git -C "$PARENT" config merge.modules-manifest.driver \
-    "bash $MISE_CONFIG_ROOT/lib/manifest-merge-driver.sh %O %A %B"
+    "bash $REPO_DIR/lib/manifest-merge-driver.sh %O %A %B"
 }
 
 # ── Union merge (no conflicts) ─────────────────────────────────
@@ -189,7 +189,7 @@ set_pin() {
 
 # ── Integrity: the driver never produces corrupt JSON-style output ───
 
-@test "merge: result is always valid TSV (sorted, 3 columns per line)" {
+@test "merge: result is always valid TSV (sorted, 3 or 4 columns per line)" {
   modules add "$REMOTE_A" --name alpha
   modules add "$REMOTE_B" --name beta
   git -C "$PARENT" commit -q -m "seed"
@@ -209,9 +209,10 @@ set_pin() {
 
   git -C "$PARENT" merge --no-edit branch-a
 
-  # All lines should have exactly 3 tab-separated fields
+  # All lines should have exactly 3 tab-separated fields, or 4 when a
+  # tracking ref is present.
   local bad
-  bad="$(awk -F'\t' 'NF != 3' "$PARENT/.modules/manifest" || true)"
+  bad="$(awk -F'\t' 'NF != 3 && NF != 4' "$PARENT/.modules/manifest" || true)"
   [ -z "$bad" ]
 
   # Sorted by column 1
@@ -240,7 +241,7 @@ set_pin() {
   run git -C "$PARENT" config --get merge.modules-manifest.driver
   [ "$status" -eq 0 ]
   [[ "$output" != *"/"* ]]
-  [[ "$output" != *"$MISE_CONFIG_ROOT"* ]]
+  [[ "$output" != *"$REPO_DIR"* ]]
 }
 
 @test "install-hooks adds merge attr to .gitattributes" {
@@ -275,7 +276,7 @@ set_pin() {
 # ── End-to-end: production driver-resolution path ──────────────
 #
 # The setup() in this file rewrites the driver config to a direct
-# `bash $MISE_CONFIG_ROOT/lib/manifest-merge-driver.sh ...` invocation
+# `bash $REPO_DIR/lib/manifest-merge-driver.sh ...` invocation
 # so the merge-logic tests don't depend on a `modules` shim being on
 # PATH. That isolates the merge logic but leaves the production
 # resolution path (`modules merge-driver %O %A %B` → PATH lookup →
@@ -303,7 +304,7 @@ set_pin() {
 set -euo pipefail
 echo "[shim] called: \$*" >> "$shim_log"
 export MODULES_CALLER_PWD="\$PWD"
-cd "$MISE_CONFIG_ROOT"
+cd "$REPO_DIR"
 exec mise run -q "\$@"
 SHIM
   chmod +x "$shim_dir/modules"

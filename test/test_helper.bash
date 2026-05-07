@@ -1,12 +1,12 @@
 #!/usr/bin/env bash
 # test_helper.bash — shared fixtures for modules tests
 
-if [ -z "${MISE_CONFIG_ROOT:-}" ]; then
-  echo "MISE_CONFIG_ROOT not set — run tests via: mise run test" >&2
-  exit 1
-fi
+REPO_DIR="$(cd "$BATS_TEST_DIRNAME/.." && pwd)"
 
-REPO_DIR="$MISE_CONFIG_ROOT"
+# Load this repo's declared tools even when a single test file is run with
+# `bats test/foo.bats` from an agent session whose inherited MISE_CONFIG_ROOT
+# points at a different repo.
+eval "$(cd "$REPO_DIR" && mise env)"
 
 # Run a modules task through mise.
 modules() {
@@ -14,7 +14,7 @@ modules() {
     echo "MODULES_CALLER_PWD not set" >&2
     return 1
   fi
-  cd "$MISE_CONFIG_ROOT" && MODULES_CALLER_PWD="$MODULES_CALLER_PWD" mise run -q "$@"
+  cd "$REPO_DIR" && MODULES_CALLER_PWD="$MODULES_CALLER_PWD" mise run -q "$@"
 }
 export -f modules
 
@@ -94,6 +94,9 @@ manifest_url_of() {
 manifest_pin_of() {
   manifest_line_of "$1" "$2" | cut -f3
 }
+manifest_track_of() {
+  manifest_line_of "$1" "$2" | cut -f4
+}
 manifest_count_of() {
   if [ ! -f "$1" ]; then echo 0; return; fi
   awk 'NF' "$1" | wc -l | tr -d ' '
@@ -102,7 +105,7 @@ manifest_has_name() {
   [ -f "$1" ] || return 1
   awk -F'\t' -v n="$2" '$1 == n { f=1; exit } END { exit !f }' "$1"
 }
-export -f manifest_line_of manifest_url_of manifest_pin_of manifest_count_of manifest_has_name
+export -f manifest_line_of manifest_url_of manifest_pin_of manifest_track_of manifest_count_of manifest_has_name
 
 # Import module_path from common.sh — single source of truth.
 # Note: common.sh requires MODULES_CALLER_PWD; tests using module_path must set it first.

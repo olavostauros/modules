@@ -57,12 +57,36 @@ setup() {
   [ "$actual" = "$pin" ]
 }
 
-@test "init skips already-cloned modules" {
+@test "init skips already-cloned untracked modules" {
   modules add "$REMOTE" --name my-repo
 
   run modules init
   [ "$status" -eq 0 ]
   [[ "$output" == *"already cloned"* ]]
+}
+
+@test "init refreshes already-cloned tracked modules without updating manifest pin" {
+  modules add "$REMOTE" --name tracked --track main
+  git -C "$PARENT" commit -m "add tracked module"
+
+  local old_pin
+  old_pin="$(manifest_pin_of "$PARENT/.modules/manifest" "tracked")"
+
+  echo "fresh" > "$REMOTE/fresh.md"
+  git -C "$REMOTE" add fresh.md
+  git -C "$REMOTE" commit -m "fresh commit"
+  local latest
+  latest="$(repo_head "$REMOTE")"
+
+  run modules init
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"tracking main"* ]]
+
+  local actual pin_after
+  actual="$(repo_head "$PARENT/modules/tracked")"
+  pin_after="$(manifest_pin_of "$PARENT/.modules/manifest" "tracked")"
+  [ "$actual" = "$latest" ]
+  [ "$pin_after" = "$old_pin" ]
 }
 
 @test "init reports failure when clone fails" {

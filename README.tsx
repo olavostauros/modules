@@ -46,8 +46,10 @@ function parseTask(filepath: string, name: string): Command {
     const optArg = line.match(/#USAGE arg "\[(.+?)\]"/);
     if (optArg) { argParts.push(`[${optArg[1]}]`); continue; }
 
-    const flag = line.match(/#USAGE flag "(--[\w-]+)(?:\s+<[\w-]+>)?"/);
-    if (flag) { argParts.push(`[${flag[1]}]`); }
+    const flag = line.match(/#USAGE flag "(--[\w-]+)(?:\s+<([\w-]+)>)?"/);
+    if (flag) {
+      argParts.push(`[${flag[1]}${flag[2] ? ` <${flag[2]}>` : ""}]`);
+    }
   }
 
   return { name, description: desc, args: argParts.join(" ") };
@@ -156,6 +158,10 @@ modules setup --path deps --gpg-key <your-fingerprint>
 modules add https://github.com/org/repo.git --name my-dep
 git commit -m "add my-dep"
 
+# Add a dependency that should refresh from main during init
+modules add https://github.com/org/shared-notes.git --name shared-notes --track main
+git commit -m "add tracked shared-notes module"
+
 # See what you have
 modules list
 modules status
@@ -174,7 +180,7 @@ modules unlock && modules init`}</CodeBlock>
       <CodeBlock>{[
         "  your-repo/",
         "  ├── .modules/",
-        "  │   ├── manifest       ← encrypted TSV (name\\turl\\tpin)",
+        "  │   ├── manifest       ← encrypted TSV (name\\turl\\tpin[\\ttrack])",
         "  │   └── config         ← plaintext JSON ({\"path\": \"modules\"})",
         "  ├── modules/          ← gitignored; real git clones live here",
         "  │   ├── fold/",
@@ -206,7 +212,7 @@ modules unlock && modules init`}</CodeBlock>
           <Bold>Encrypted manifest</Bold>
           {" — "}
           <Code>.modules/manifest</Code>
-          {" holds all submodule state (name, URL, pin). "}
+          {" holds all submodule state (name, URL, pin, and optional tracking ref). "}
           <Code>modules setup</Code>
           {" initializes "}
           <Link href="https://github.com/KnickKnackLabs/rudi">rudi</Link>
@@ -217,6 +223,16 @@ modules unlock && modules init`}</CodeBlock>
           {" — no hashing. "}
           <Code>cd modules/fold</Code>
           {" just works."}
+        </Item>
+        <Item>
+          <Bold>Optional branch tracking</Bold>
+          {" — modules added with "}
+          <Code>--track main</Code>
+          {" refresh their local clone during "}
+          <Code>modules init</Code>
+          {" without updating the recorded pin. Use "}
+          <Code>modules update</Code>
+          {" when you want to advance and stage the durable pin."}
         </Item>
         <Item>
           <Bold>Custom clone root</Bold>
@@ -285,10 +301,10 @@ mise run test`}</CodeBlock>
         "├── .mise/tasks/",
         "│   ├── setup           # Initialize manifest, config, gitignore, hooks, merge driver",
         "│   ├── add             # Clone into modules/<name>, record in manifest",
-        "│   ├── init            # Populate all modules from the manifest",
+        "│   ├── init            # Populate modules; refresh tracked clones from their ref",
         "│   ├── list            # Show modules (table or --json)",
         "│   ├── status          # Show at-pin / changed / missing",
-        "│   ├── update          # Pull latest, update pinned SHA",
+        "│   ├── update          # Pull latest, update pinned SHA, optionally commit",
         "│   ├── remove          # Clean removal of clone + manifest entry",
         "│   ├── lock / unlock   # Wrappers around rudi lock / unlock",
         "│   ├── install-hooks   # Register the merge driver (called by setup)",

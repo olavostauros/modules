@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-#MISE description="Clone and checkout all modules from the manifest"
+#MISE description="Clone modules and refresh tracked clones from their ref"
 #MISE dir="{{config_root}}"
 set -euo pipefail
 
@@ -18,14 +18,36 @@ fi
 mkdir -p "$(clones_dir)"
 clones_rel="$(clones_path_rel)"
 
+sync_to_track() {
+  local name="$1" mod_path="$2" track="$3"
+
+  if ! git -C "$mod_path" fetch -q origin "$track" 2>&1; then
+    echo "  $name: failed to fetch tracked ref '$track'" >&2
+    return 1
+  fi
+  if ! git -C "$mod_path" checkout -q FETCH_HEAD 2>&1; then
+    echo "  $name: failed to checkout tracked ref '$track'" >&2
+    return 1
+  fi
+
+  local actual
+  actual="$(git -C "$mod_path" rev-parse HEAD)"
+  echo "  $name: tracking $track @ ${actual:0:12}"
+}
+
 errors=0
 
-while IFS=$'\t' read -r name url pin; do
+while IFS=$'\t' read -r name url pin track; do
   [ -z "$name" ] && continue
+  track="${track:-}"
   mod_path="$(module_path "$name")"
 
   if [ -d "$mod_path/.git" ]; then
-    echo "  $name: already cloned"
+    if [ -n "$track" ]; then
+      sync_to_track "$name" "$mod_path" "$track" || errors=$((errors + 1))
+    else
+      echo "  $name: already cloned"
+    fi
     continue
   fi
 
@@ -51,11 +73,15 @@ while IFS=$'\t' read -r name url pin; do
     continue
   fi
 
-  git -C "$mod_path" checkout "$pin" 2>&1
+  if [ -n "$track" ]; then
+    sync_to_track "$name" "$mod_path" "$track" || errors=$((errors + 1))
+  else
+    git -C "$mod_path" checkout "$pin" 2>&1
 
-  actual="$(git -C "$mod_path" rev-parse HEAD)"
-  if [ "$actual" != "$pin" ]; then
-    echo "  $name: warning — expected $pin, at $actual" >&2
+    actual="$(git -C "$mod_path" rev-parse HEAD)"
+    if [ "$actual" != "$pin" ]; then
+      echo "  $name: warning — expected $pin, at $actual" >&2
+    fi
   fi
 done < "$MANIFEST"
 

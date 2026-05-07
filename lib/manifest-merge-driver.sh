@@ -4,7 +4,7 @@
 # Git calls this with: %O %A %B (ancestor, ours, theirs).
 # Writes the merged result to %A. Exit 0 on success, non-zero on conflict.
 #
-# Manifest format: <name>\t<url>\t<pin>, one per line, sorted by name.
+# Manifest format: <name>\t<url>\t<pin>[\t<track>], one per line, sorted by name.
 #
 # Strategy: union merge keyed on name.
 # - Same name, same url+pin on both sides → take it.
@@ -19,8 +19,9 @@
 # - Name new on both sides with different values → CONFLICT.
 #
 # Adapted from KnickKnackLabs/notes' manifest-merge-driver.sh. Schema
-# differs (3 cols vs 2); key is col 1 (name) in both, but notes has
-# (obfuscated-id, readable-name) and we have (name, url, pin).
+# differs (3+ optional tracking cols vs 2); key is col 1 (name) in both,
+# but notes has (obfuscated-id, readable-name) and we have (name, url, pin,
+# optional track).
 #
 # Bash 3.2 compatible.
 set -eo pipefail

@@ -4,6 +4,7 @@
 #USAGE arg "<url>" help="Git URL of the repo to add"
 #USAGE flag "--name <name>" help="Module name (default: derived from URL)"
 #USAGE flag "--ref <ref>" help="Git ref to pin (default: HEAD)"
+#USAGE flag "--track <ref>" help="Track this ref during init/update while retaining a pinned SHA"
 set -euo pipefail
 
 source "$MISE_CONFIG_ROOT/lib/common.sh"
@@ -42,14 +43,24 @@ fi
 mkdir -p "$(clones_dir)"
 gum spin --title "Cloning $url → $clones_rel/$name" -- git clone "$url" "$mod_path"
 
-if [ -n "${usage_ref:-}" ]; then
-  git -C "$mod_path" checkout "$usage_ref"
+checkout_ref="${usage_ref:-}"
+track_ref="${usage_track:-}"
+if [ -z "$checkout_ref" ] && [ -n "$track_ref" ]; then
+  checkout_ref="$track_ref"
+fi
+
+if [ -n "$checkout_ref" ]; then
+  git -C "$mod_path" checkout "$checkout_ref"
 fi
 
 pin="$(git -C "$mod_path" rev-parse HEAD)"
 
-manifest_set "$name" "$url" "$pin"
+manifest_set "$name" "$url" "$pin" "$track_ref"
 
 git -C "$TARGET_DIR" add "$MANIFEST"
 
-gum style --foreground 2 "Added module '$name' ($clones_rel/$name @ ${pin:0:12})"
+if [ -n "$track_ref" ]; then
+  gum style --foreground 2 "Added module '$name' ($clones_rel/$name @ ${pin:0:12}, tracking $track_ref)"
+else
+  gum style --foreground 2 "Added module '$name' ($clones_rel/$name @ ${pin:0:12})"
+fi

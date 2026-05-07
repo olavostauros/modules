@@ -15,14 +15,14 @@ if [ "$(manifest_count)" -eq 0 ]; then
 fi
 
 if [ "${usage_json:-}" = "true" ]; then
-  # Emit as JSON: {name: {url, pin}}, to preserve the old --json schema.
-  # Build via jq -nR so URLs/names containing quotes, backslashes, or control
-  # characters are safely escaped (awk-based string interpolation is unsafe).
+  # Emit as JSON: {name: {url, pin, track?}}. Build via jq -nR so
+  # URLs/names containing quotes, backslashes, or control characters are
+  # safely escaped (awk-based string interpolation is unsafe).
   jq -nR '
     [ inputs
       | select(length > 0)
       | split("\t")
-      | { (.[0]): { url: .[1], pin: .[2] } }
+      | { (.[0]): ({ url: .[1], pin: .[2] } + if (.[3] // "") != "" then { track: .[3] } else {} end) }
     ]
     | add // {}
   ' "$MANIFEST"
@@ -30,6 +30,6 @@ if [ "${usage_json:-}" = "true" ]; then
 fi
 
 {
-  printf "Name\tURL\tPin\n"
-  awk -F'\t' '{ printf "%s\t%s\t%.12s\n", $1, $2, $3 }' "$MANIFEST"
+  printf "Name\tURL\tPin\tTrack\n"
+  awk -F'\t' '{ track = (NF >= 4 && $4 != "") ? $4 : "-"; printf "%s\t%s\t%.12s\t%s\n", $1, $2, $3, track }' "$MANIFEST"
 } | gum table --print --separator "	"
