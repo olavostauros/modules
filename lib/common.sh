@@ -138,7 +138,9 @@ sync_tracked_branch() {
   fi
 
   local current_branch current_head
-  current_branch="$(git -C "$mod_path" symbolic-ref --quiet --short HEAD || true)"
+  if ! current_branch="$(git -C "$mod_path" symbolic-ref --quiet --short HEAD)"; then
+    current_branch=""
+  fi
   current_head="$(git -C "$mod_path" rev-parse HEAD)"
   if [ -z "$current_branch" ] && ! git -C "$mod_path" merge-base --is-ancestor "$current_head" "origin/$branch"; then
     echo "  $name: detached HEAD has commits not in origin/$branch; refusing to overwrite" >&2
