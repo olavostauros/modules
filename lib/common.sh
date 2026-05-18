@@ -137,6 +137,14 @@ sync_tracked_branch() {
     return 1
   fi
 
+  local current_branch current_head
+  current_branch="$(git -C "$mod_path" symbolic-ref --quiet --short HEAD || true)"
+  current_head="$(git -C "$mod_path" rev-parse HEAD)"
+  if [ -z "$current_branch" ] && ! git -C "$mod_path" merge-base --is-ancestor "$current_head" "origin/$branch"; then
+    echo "  $name: detached HEAD has commits not in origin/$branch; refusing to overwrite" >&2
+    return 1
+  fi
+
   if git -C "$mod_path" show-ref --verify --quiet "refs/heads/$branch"; then
     if ! git -C "$mod_path" checkout -q "$branch" 2>&1; then
       echo "  $name: failed to checkout local branch '$branch'" >&2

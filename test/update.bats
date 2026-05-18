@@ -79,6 +79,20 @@ setup() {
   [[ "$output" == *"commits not in origin/main"* ]]
 }
 
+@test "update refuses detached tracked clone with local-only commits" {
+  modules add "$REMOTE" --name tracked --track main
+  git -C "$PARENT" commit -m "add tracked module"
+
+  git -C "$PARENT/modules/tracked" checkout -q --detach HEAD
+  echo "detached work" > "$PARENT/modules/tracked/detached.md"
+  git -C "$PARENT/modules/tracked" add detached.md
+  git -C "$PARENT/modules/tracked" commit -m "detached local work"
+
+  run modules update tracked
+  [ "$status" -ne 0 ]
+  [[ "$output" == *"detached HEAD has commits not in origin/main"* ]]
+}
+
 @test "update --commit commits manifest changes" {
   modules add "$REMOTE" --name my-repo
   git -C "$PARENT" commit -m "add module"

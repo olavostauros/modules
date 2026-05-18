@@ -127,6 +127,20 @@ setup() {
   [[ "$output" == *"uncommitted changes"* ]]
 }
 
+@test "init refuses detached tracked clones with local-only commits" {
+  modules add "$REMOTE" --name tracked --track main
+  git -C "$PARENT" commit -m "add tracked module"
+
+  git -C "$PARENT/modules/tracked" checkout -q --detach HEAD
+  echo "detached work" > "$PARENT/modules/tracked/detached.md"
+  git -C "$PARENT/modules/tracked" add detached.md
+  git -C "$PARENT/modules/tracked" commit -m "detached local work"
+
+  run modules init
+  [ "$status" -ne 0 ]
+  [[ "$output" == *"detached HEAD has commits not in origin/main"* ]]
+}
+
 @test "init reports failure when clone fails" {
   # Add a module with a bogus URL directly in the manifest (TSV format)
   printf 'bad-repo\tfile:///nonexistent/repo.git\t0000000000000000000000000000000000000000\n' \
