@@ -75,7 +75,9 @@ skip_unless_gpg_key() {
   fi
 
   local fpr
-  fpr="$(testicles inspect "$email" --first --json 2>/dev/null | jq -r '.fingerprint // empty')" || true
+  if ! fpr="$(testicles inspect "$email" --first --json 2>/dev/null | jq -r '.fingerprint // empty')"; then
+    fpr=""
+  fi
   if [ -z "$fpr" ]; then
     skip "no secret key matches $email"
   fi
