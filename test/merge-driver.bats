@@ -97,6 +97,75 @@ setup() {
   [ "$output" = "0" ]
 }
 
+@test "merge: concurrent same-module pin bumps choose descendant from ours" {
+  modules add "$REMOTE_A" --name alpha
+  git -C "$PARENT" commit -q -m "seed alpha"
+
+  echo "v1" > "$REMOTE_A/v1.md"
+  git -C "$REMOTE_A" add v1.md
+  git -C "$REMOTE_A" commit -qm "v1"
+  local v1
+  v1="$(git -C "$REMOTE_A" rev-parse HEAD)"
+
+  git -C "$PARENT" checkout -q -b branch-a
+  modules update alpha
+  [ "$(manifest_pin_of "$PARENT/.modules/manifest" "alpha")" = "$v1" ]
+  git -C "$PARENT" commit -q -m "pin alpha to v1"
+
+  echo "v2" > "$REMOTE_A/v2.md"
+  git -C "$REMOTE_A" add v2.md
+  git -C "$REMOTE_A" commit -qm "v2"
+  local v2
+  v2="$(git -C "$REMOTE_A" rev-parse HEAD)"
+
+  git -C "$PARENT" checkout -q main
+  git -C "$PARENT" checkout -q -b branch-b
+  modules update alpha
+  [ "$(manifest_pin_of "$PARENT/.modules/manifest" "alpha")" = "$v2" ]
+  git -C "$PARENT" commit -q -m "pin alpha to v2"
+
+  git -C "$PARENT" merge --no-edit branch-a
+
+  [ "$(manifest_pin_of "$PARENT/.modules/manifest" "alpha")" = "$v2" ]
+  run grep -c "<<<<<<<" "$PARENT/.modules/manifest"
+  [ "$output" = "0" ]
+}
+
+@test "merge: concurrent same-module pin bumps choose descendant from theirs" {
+  modules add "$REMOTE_A" --name alpha
+  git -C "$PARENT" commit -q -m "seed alpha"
+
+  echo "v1" > "$REMOTE_A/v1.md"
+  git -C "$REMOTE_A" add v1.md
+  git -C "$REMOTE_A" commit -qm "v1"
+  local v1
+  v1="$(git -C "$REMOTE_A" rev-parse HEAD)"
+
+  git -C "$PARENT" checkout -q -b branch-a
+  modules update alpha
+  [ "$(manifest_pin_of "$PARENT/.modules/manifest" "alpha")" = "$v1" ]
+  git -C "$PARENT" commit -q -m "pin alpha to v1"
+
+  echo "v2" > "$REMOTE_A/v2.md"
+  git -C "$REMOTE_A" add v2.md
+  git -C "$REMOTE_A" commit -qm "v2"
+  local v2
+  v2="$(git -C "$REMOTE_A" rev-parse HEAD)"
+
+  git -C "$PARENT" checkout -q main
+  git -C "$PARENT" checkout -q -b branch-b
+  modules update alpha
+  [ "$(manifest_pin_of "$PARENT/.modules/manifest" "alpha")" = "$v2" ]
+  git -C "$PARENT" commit -q -m "pin alpha to v2"
+
+  git -C "$PARENT" checkout -q branch-a
+  git -C "$PARENT" merge --no-edit branch-b
+
+  [ "$(manifest_pin_of "$PARENT/.modules/manifest" "alpha")" = "$v2" ]
+  run grep -c "<<<<<<<" "$PARENT/.modules/manifest"
+  [ "$output" = "0" ]
+}
+
 @test "merge: delete on one side + unchanged on other → deletion accepted" {
   modules add "$REMOTE_A" --name alpha
   modules add "$REMOTE_B" --name beta
