@@ -72,6 +72,60 @@ normalize "$ANCESTOR" > "$WORK/anc"
 normalize "$OURS"     > "$WORK/ours"
 normalize "$THEIRS"   > "$WORK/theirs"
 
+manifest_value_for_name() {
+  local file="$1" name="$2"
+  awk -F'\t' -v wanted="$name" '
+    NF >= 3 && $1 == wanted { print substr($0, index($0, "\t") + 1); found=1; exit }
+    END { exit found ? 0 : 1 }
+  ' "$file"
+}
+
+manifest_value_field() {
+  local value="$1" field="$2"
+  printf '%s\n' "$value" | awk -F'\t' -v field="$field" '{ print $field; exit }'
+}
+
+manifest_value_field_count() {
+  local value="$1"
+  printf '%s\n' "$value" | awk -F'\t' '{ print NF; exit }'
+}
+
+module_clone_dir() {
+  local name="$1" configured=""
+  if [ -f ".modules/config" ] && command -v jq >/dev/null 2>&1; then
+    if configured=$(jq -r '.path // empty' .modules/config 2>/dev/null); then
+      [ -n "$configured" ] || configured="modules"
+    else
+      configured="modules"
+    fi
+  else
+    configured="modules"
+  fi
+  printf '%s/%s\n' "$configured" "$name"
+}
+
+module_pin_is_ancestor() {
+  local name="$1" older="$2" newer="$3" expected_url="$4" clone_dir actual_url
+  clone_dir=$(module_clone_dir "$name")
+
+  if ! git -C "$clone_dir" rev-parse --git-dir >/dev/null 2>&1; then
+    return 1
+  fi
+  if ! actual_url=$(git -C "$clone_dir" remote get-url origin 2>/dev/null); then
+    return 1
+  fi
+  if [ "$actual_url" != "$expected_url" ]; then
+    return 1
+  fi
+  if ! git -C "$clone_dir" cat-file -e "${older}^{commit}" 2>/dev/null; then
+    return 1
+  fi
+  if ! git -C "$clone_dir" cat-file -e "${newer}^{commit}" 2>/dev/null; then
+    return 1
+  fi
+  git -C "$clone_dir" merge-base --is-ancestor "$older" "$newer" >/dev/null 2>&1
+}
+
 # Compute the sorted-unique union of names across all three sides. Use
 # `NF >= 3` to filter corrupt/partial rows; cut -f1 would emit the
 # whole line for rows lacking tabs and produce phantom names downstream.
@@ -80,6 +134,52 @@ normalize "$THEIRS"   > "$WORK/theirs"
   awk -F'\t' 'NF >= 3 {print $1}' "$WORK/ours"   2>/dev/null
   awk -F'\t' 'NF >= 3 {print $1}' "$WORK/theirs" 2>/dev/null
 } | sort -u > "$WORK/all_names"
+
+# Pre-resolve same-module pin bumps when both sides changed the pin and one
+# pin is provably an ancestor of the other in the matching local module clone.
+# If the clone is missing, its origin URL does not match the manifest URL,
+# commits are missing, URL/track metadata differs, or the histories diverged,
+# leave the row unresolved so the normal conflict path fires. Merge drivers
+# should not fetch or guess.
+: > "$WORK/descendant_resolutions"
+while IFS= read -r name; do
+  [ -n "$name" ] || continue
+
+  a_value=$(manifest_value_for_name "$WORK/anc" "$name") && a_set=true || a_set=false
+  o_value=$(manifest_value_for_name "$WORK/ours" "$name") && o_set=true || o_set=false
+  t_value=$(manifest_value_for_name "$WORK/theirs" "$name") && t_set=true || t_set=false
+
+  if ! $a_set || ! $o_set || ! $t_set; then
+    continue
+  fi
+  if [ "$o_value" = "$t_value" ] || [ "$o_value" = "$a_value" ] || [ "$t_value" = "$a_value" ]; then
+    continue
+  fi
+
+  o_fields=$(manifest_value_field_count "$o_value")
+  t_fields=$(manifest_value_field_count "$t_value")
+  if { [ "$o_fields" -ne 2 ] && [ "$o_fields" -ne 3 ]; } \
+    || { [ "$t_fields" -ne 2 ] && [ "$t_fields" -ne 3 ]; }; then
+    continue
+  fi
+
+  o_url=$(manifest_value_field "$o_value" 1)
+  o_pin=$(manifest_value_field "$o_value" 2)
+  o_track=$(manifest_value_field "$o_value" 3)
+  t_url=$(manifest_value_field "$t_value" 1)
+  t_pin=$(manifest_value_field "$t_value" 2)
+  t_track=$(manifest_value_field "$t_value" 3)
+
+  if [ "$o_url" != "$t_url" ] || [ "$o_track" != "$t_track" ]; then
+    continue
+  fi
+
+  if module_pin_is_ancestor "$name" "$t_pin" "$o_pin" "$o_url"; then
+    printf '%s\t%s\n' "$name" "$o_value" >> "$WORK/descendant_resolutions"
+  elif module_pin_is_ancestor "$name" "$o_pin" "$t_pin" "$o_url"; then
+    printf '%s\t%s\n' "$name" "$t_value" >> "$WORK/descendant_resolutions"
+  fi
+done < "$WORK/all_names"
 
 : > "$WORK/merged"
 : > "$WORK/conflicts"
@@ -98,7 +198,8 @@ awk -F'\t' \
     -v ALLNAMES="$WORK/all_names" \
     -v ANCFILE="$WORK/anc" \
     -v OURSFILE="$WORK/ours" \
-    -v THEIRSFILE="$WORK/theirs" '
+    -v THEIRSFILE="$WORK/theirs" \
+    -v RESFILE="$WORK/descendant_resolutions" '
   BEGIN { OFS = "\t"; conflict = 0 }
 
   # Filter corrupt/partial rows the same way the union collection above
@@ -118,6 +219,7 @@ awk -F'\t' \
   # first-wins). The manifest invariant guarantees one entry per name,
   # so this only matters as archaeology if a corrupt manifest is fed
   # in; in that case neither behavior is more correct than the other.
+  FILENAME == RESFILE    { resolved[$1] = substr($0, index($0, "\t") + 1); has_resolved[$1] = 1; next }
   FILENAME == ANCFILE    { anc[$1]    = substr($0, index($0, "\t") + 1); has_anc[$1]    = 1 }
   FILENAME == OURSFILE   { ours[$1]   = substr($0, index($0, "\t") + 1); has_ours[$1]   = 1 }
   FILENAME == THEIRSFILE { theirs[$1] = substr($0, index($0, "\t") + 1); has_theirs[$1] = 1 }
@@ -136,6 +238,10 @@ awk -F'\t' \
         if (o == t) {
           # Same on both sides — take it.
           print name OFS o > MERGED
+        } else if (name in has_resolved) {
+          # Both sides bumped the same module pin, and the bash pre-pass
+          # proved one pin descends from the other in the local clone.
+          print name OFS resolved[name] > MERGED
         } else if (!a_set) {
           # Both sides added the name with different values — conflict.
           emit_conflict(name, o, t, "ours", "theirs")
@@ -207,7 +313,7 @@ awk -F'\t' \
     print name OFS t_val          > CONFLICTS
     print ">>>>>>> " theirs_label > CONFLICTS
   }
-' "$WORK/anc" "$WORK/ours" "$WORK/theirs"
+' "$WORK/descendant_resolutions" "$WORK/anc" "$WORK/ours" "$WORK/theirs"
 awk_status=$?
 set -e
 
