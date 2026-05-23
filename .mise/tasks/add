@@ -36,13 +36,14 @@ clones_rel="$(clones_path_rel)"
 
 if [ -d "$mod_path" ]; then
   if git -C "$mod_path" rev-parse --git-dir &>/dev/null; then
-    existing_url="$(git -C "$mod_path" remote get-url origin 2>/dev/null || true)"
-    if [ -n "$existing_url" ] && [ "$existing_url" != "$url" ]; then
-      echo "Error: clone directory already exists with a different origin: $clones_rel/$name" >&2
-      echo "Existing origin: $existing_url" >&2
-      echo "Requested URL: $url" >&2
-      echo "Choose another --name or remove the existing directory before retrying." >&2
-      exit 1
+    if existing_url="$(git -C "$mod_path" remote get-url origin 2>/dev/null)"; then
+      if [ "$existing_url" != "$url" ]; then
+        echo "Error: clone directory already exists with a different origin: $clones_rel/$name" >&2
+        echo "Existing origin: $existing_url" >&2
+        echo "Requested URL: $url" >&2
+        echo "Choose another --name or remove the existing directory before retrying." >&2
+        exit 1
+      fi
     fi
   fi
 
