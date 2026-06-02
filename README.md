@@ -8,7 +8,7 @@ Manage repo-level dependencies with an encrypted manifest and a gitignored clone
 A public observer sees only 'this repo uses modules' — no names, no pinned commits, no count.
 
 ![lang: bash](https://img.shields.io/badge/lang-bash-4EAA25?style=flat&logo=gnubash&logoColor=white)
-[![tests: 112 passing](https://img.shields.io/badge/tests-112%20passing-brightgreen?style=flat)](test/)
+[![tests: 119 passing](https://img.shields.io/badge/tests-119%20passing-brightgreen?style=flat)](test/)
 ![License: MIT](https://img.shields.io/badge/License-MIT-blue?style=flat)
 
 </div>
@@ -52,6 +52,9 @@ modules status
 
 # On a fresh clone: unlock, then populate from the manifest
 modules unlock && modules init
+
+# Or initialize only the modules this environment is expected to clone
+modules init my-dep shared-notes
 ```
 
 ## How it works
@@ -86,6 +89,7 @@ What a public observer sees on GitHub (locked):
 - **Encrypted manifest** — `.modules/manifest` holds all submodule state (name, URL, pin, and optional tracking branch). `modules setup` initializes [rudi](https://github.com/KnickKnackLabs/rudi) when needed and assigns the manifest to git-crypt.
 - **Readable names on disk** — no hashing. `cd modules/fold` just works.
 - **Optional branch tracking** — modules added with `--track main` refresh their local clone during `modules init` without updating the recorded pin. Use `modules update` when you want to advance and stage the durable pin.
+- **Selected initialization** — `modules init fold den` initializes only the named modules. With no names, `modules init` initializes every manifest entry. Failure is still fatal for every selected module.
 - **Custom clone root** — `modules setup --path deps` picks a different location (e.g., `deps/`, `third-party/vendored/`). Stored in `.modules/config`.
 - **Merge-safe manifest** — a git-crypt-aware merge driver handles concurrent pin bumps without corrupting the manifest. Installed by default.
 
@@ -96,7 +100,7 @@ What a public observer sees on GitHub (locked):
 | Command                                                              | Description                                                               |
 | -------------------------------------------------------------------- | ------------------------------------------------------------------------- |
 | `modules add <url> [--name <name>] [--ref <ref>] [--track <branch>]` | Add a submodule                                                           |
-| `modules init`                                                       | Clone modules and refresh tracked clones from their branch                |
+| `modules init [names]...`                                            | Clone modules and refresh tracked clones from their branch                |
 | `modules install-hooks`                                              | Install git merge driver for the modules manifest                         |
 | `modules list [--json]`                                              | List modules                                                              |
 | `modules lock`                                                       | Lock encrypted manifest (re-encrypt on disk)                              |
@@ -117,7 +121,7 @@ cd modules && mise trust && mise install
 mise run test
 ```
 
-**112 tests** across 13 suites, using [BATS](https://github.com/bats-core/bats-core). All tests use local git repos in temp directories — no network, no external dependencies.
+**119 tests** across 13 suites, using [BATS](https://github.com/bats-core/bats-core). All tests use local git repos in temp directories — no network, no external dependencies.
 
 The `git-mechanics` suite verifies git's behavior around gitignored nested repos. The `merge-driver` suite simulates concurrent pin bumps to validate the manifest merge logic. The `roundtrip` suite drives the full setup → add → lock → fresh-clone → unlock → init path end-to-end with git-crypt.
 

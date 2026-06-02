@@ -40,11 +40,11 @@ function parseTask(filepath: string, name: string): Command {
   // Build usage string from #USAGE lines
   const argParts: string[] = [];
   for (const line of lines) {
-    const reqArg = line.match(/#USAGE arg "<(.+?)>"/);
-    if (reqArg) { argParts.push(`<${reqArg[1]}>`); continue; }
+    const reqArg = line.match(/#USAGE arg "<(.+?)>(\.\.\.)?"/);
+    if (reqArg) { argParts.push(`<${reqArg[1]}>${reqArg[2] ?? ""}`); continue; }
 
-    const optArg = line.match(/#USAGE arg "\[(.+?)\]"/);
-    if (optArg) { argParts.push(`[${optArg[1]}]`); continue; }
+    const optArg = line.match(/#USAGE arg "\[(.+?)\](\.\.\.)?"/);
+    if (optArg) { argParts.push(`[${optArg[1]}]${optArg[2] ?? ""}`); continue; }
 
     const flag = line.match(/#USAGE flag "(--[\w-]+)(?:\s+<([\w-]+)>)?"/);
     if (flag) {
@@ -167,7 +167,10 @@ modules list
 modules status
 
 # On a fresh clone: unlock, then populate from the manifest
-modules unlock && modules init`}</CodeBlock>
+modules unlock && modules init
+
+# Or initialize only the modules this environment is expected to clone
+modules init my-dep shared-notes`}</CodeBlock>
     </Section>
 
     <Section title="How it works">
@@ -233,6 +236,14 @@ modules unlock && modules init`}</CodeBlock>
           {" without updating the recorded pin. Use "}
           <Code>modules update</Code>
           {" when you want to advance and stage the durable pin."}
+        </Item>
+        <Item>
+          <Bold>Selected initialization</Bold>
+          {" — "}
+          <Code>modules init fold den</Code>
+          {" initializes only the named modules. With no names, "}
+          <Code>modules init</Code>
+          {" initializes every manifest entry. Failure is still fatal for every selected module."}
         </Item>
         <Item>
           <Bold>Custom clone root</Bold>

@@ -167,3 +167,73 @@ setup() {
   [ -d "$PARENT/modules/first/.git" ]
   [ -d "$PARENT/modules/second/.git" ]
 }
+
+@test "init can initialize only selected modules" {
+  local remote2="$BATS_TEST_TMPDIR/remote2"
+  create_remote_repo "$remote2"
+
+  modules add "$REMOTE" --name first
+  modules add "$remote2" --name second
+  git -C "$PARENT" commit -m "add modules"
+
+  rm -rf "$PARENT/modules/first" "$PARENT/modules/second"
+
+  run modules init second
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"second"* ]]
+  [[ "$output" != *"first"* ]]
+  [ ! -e "$PARENT/modules/first" ]
+  [ -d "$PARENT/modules/second/.git" ]
+}
+
+@test "init can initialize multiple selected modules" {
+  local remote2="$BATS_TEST_TMPDIR/remote2"
+  local remote3="$BATS_TEST_TMPDIR/remote3"
+  create_remote_repo "$remote2"
+  create_remote_repo "$remote3"
+
+  modules add "$REMOTE" --name first
+  modules add "$remote2" --name second
+  modules add "$remote3" --name third
+  git -C "$PARENT" commit -m "add modules"
+
+  rm -rf "$PARENT/modules/first" "$PARENT/modules/second" "$PARENT/modules/third"
+
+  run modules init first third
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"first"* ]]
+  [[ "$output" != *"second"* ]]
+  [[ "$output" == *"third"* ]]
+  [ -d "$PARENT/modules/first/.git" ]
+  [ ! -e "$PARENT/modules/second" ]
+  [ -d "$PARENT/modules/third/.git" ]
+}
+
+@test "init selected modules skips unselected clone failures" {
+  modules add "$REMOTE" --name good
+  printf 'private\tfile:///nonexistent/private.git\t0000000000000000000000000000000000000000\n' \
+    >> "$PARENT/.modules/manifest"
+  git -C "$PARENT" add .modules/manifest
+  git -C "$PARENT" commit -m "add modules"
+
+  rm -rf "$PARENT/modules/good"
+
+  run modules init good
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"good"* ]]
+  [[ "$output" != *"private"* ]]
+  [ -d "$PARENT/modules/good/.git" ]
+  [ ! -e "$PARENT/modules/private" ]
+}
+
+@test "init fails clearly for unknown selected modules before cloning" {
+  modules add "$REMOTE" --name good
+  git -C "$PARENT" commit -m "add module"
+
+  rm -rf "$PARENT/modules/good"
+
+  run modules init missing
+  [ "$status" -ne 0 ]
+  [[ "$output" == *"module 'missing' not found"* ]]
+  [ ! -e "$PARENT/modules/good" ]
+}
