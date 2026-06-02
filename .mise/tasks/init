@@ -1,12 +1,47 @@
 #!/usr/bin/env bash
 #MISE description="Clone modules and refresh tracked clones from their branch"
 #MISE dir="{{config_root}}"
+#USAGE arg "[names]..." var=#true help="Module names to initialize (omit to initialize all)"
 set -euo pipefail
 
 source "$MISE_CONFIG_ROOT/lib/common.sh"
 
 require_git
 require_initialized
+
+module_selected() {
+  local candidate="$1" wanted
+  shift
+
+  if [ "$#" -eq 0 ]; then
+    return 0
+  fi
+
+  for wanted in "$@"; do
+    if [ "$candidate" = "$wanted" ]; then
+      return 0
+    fi
+  done
+
+  return 1
+}
+
+validate_selected_modules() {
+  local wanted errors=0
+
+  for wanted in "$@"; do
+    if ! manifest_has "$wanted"; then
+      echo "Error: module '$wanted' not found" >&2
+      errors=$((errors + 1))
+    fi
+  done
+
+  [ "$errors" -eq 0 ]
+}
+
+if ! validate_selected_modules "$@"; then
+  exit 1
+fi
 
 count="$(manifest_count)"
 
@@ -32,6 +67,10 @@ errors=0
 
 while IFS=$'\t' read -r name url pin track; do
   [ -z "$name" ] && continue
+  if ! module_selected "$name" "$@"; then
+    continue
+  fi
+
   track="${track:-}"
   mod_path="$(module_path "$name")"
 
