@@ -115,6 +115,21 @@ setup() {
   [ "$(manifest_pin_of "$PARENT/.modules/manifest" "untr")" = "$old_pin" ]
 }
 
+@test "update ignores untracked files in untracked clone" {
+  modules add "$REMOTE" --name untr
+  git -C "$PARENT" commit -m "add module"
+
+  echo "upstream" > "$REMOTE/README.md"
+  git -C "$REMOTE" add README.md
+  git -C "$REMOTE" commit -m "upstream edits readme"
+  echo "scratch" > "$PARENT/modules/untr/scratch.txt"
+
+  run modules update untr
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"updated"* ]]
+  [ -f "$PARENT/modules/untr/scratch.txt" ]
+}
+
 @test "update --commit commits manifest changes" {
   modules add "$REMOTE" --name my-repo
   git -C "$PARENT" commit -m "add module"

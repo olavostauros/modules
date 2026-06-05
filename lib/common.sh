@@ -115,9 +115,21 @@ module_path() {
 
 # Refuse to sync a module whose clone has uncommitted changes. Names the module
 # and its clone path so the user can find the gitignored clone (#32).
-# Usage: assert_module_clean <name> <mod_path> <context>
+# Usage: assert_module_clean <name> <mod_path> <context> [tracked-only]
 assert_module_clean() {
-  local name="$1" mod_path="$2" context="$3" dirty
+  local name="$1" mod_path="$2" context="$3" mode="${4:-all}" dirty
+  if [ "$mode" = "tracked-only" ]; then
+    if ! git -C "$mod_path" update-index -q --refresh; then
+      echo "  $name: failed to inspect worktree before $context" >&2
+      return 1
+    fi
+    if ! git -C "$mod_path" diff-index --quiet HEAD --; then
+      echo "  $name: worktree has uncommitted changes in $mod_path; refusing to $context" >&2
+      echo "  Commit or stash them in $mod_path, then re-run 'modules update'." >&2
+      return 1
+    fi
+    return 0
+  fi
   if ! dirty="$(git -C "$mod_path" status --porcelain)"; then
     echo "  $name: failed to inspect worktree before $context" >&2
     return 1
