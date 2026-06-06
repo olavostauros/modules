@@ -172,7 +172,7 @@ setup() {
   git -C "$PARENT" commit -q -m "seed"
 
   git -C "$PARENT" checkout -q -b branch-a
-  modules remove beta
+  modules remove beta --yes
   git -C "$PARENT" commit -q -m "drop beta"
 
   git -C "$PARENT" checkout -q main
@@ -265,7 +265,7 @@ set_pin() {
 
   git -C "$PARENT" checkout -q -b branch-a
   # Remove one, add another
-  modules remove beta
+  modules remove beta --yes
   local REMOTE_C="$BATS_TEST_TMPDIR/remote_c"
   create_remote_repo "$REMOTE_C"
   modules add "$REMOTE_C" --name gamma

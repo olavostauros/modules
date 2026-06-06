@@ -3,6 +3,7 @@
 #MISE dir="{{config_root}}"
 #USAGE arg "[name]" default="" help="Module name (omit to update all)"
 #USAGE flag "--commit" default=#false help="Commit manifest pin changes after updating"
+#USAGE flag "-y --yes" default=#false help="Skip interactive confirmation"
 set -euo pipefail
 
 source "$MISE_CONFIG_ROOT/lib/common.sh"
@@ -86,7 +87,7 @@ maybe_commit_updates() {
   local msg
   msg="$(commit_message)"
 
-  if [ "${usage_commit:-}" = "true" ]; then
+  if [ "${usage_commit:-}" = "true" ] || [ "${usage_yes:-}" = "true" ]; then
     git -C "$TARGET_DIR" commit -m "$msg" --only -- "$MANIFEST_REL"
     return 0
   fi
@@ -99,6 +100,7 @@ maybe_commit_updates() {
   fi
 
   echo "Manifest changes staged. Commit with: git commit -m \"$msg\""
+  echo "  Or re-run with --yes to commit automatically."
 }
 
 update_module() {

@@ -184,6 +184,27 @@ sync_tracked_branch() {
   return 1
 }
 
+# ── Confirm-or-require-yes ─────────────────────────────────────
+
+# Confirm a destructive operation or require --yes to proceed.
+# The calling task must declare #USAGE flag "-y --yes" default=#false so
+# that mise sets usage_yes=true when the flag is passed.
+# Returns 0 if confirmed, 1 if refused.
+confirm_or_require_yes() {
+  local message="$1"
+
+  if [ "${usage_yes:-}" = "true" ]; then
+    return 0
+  fi
+
+  if [ -t 0 ] && [ -t 1 ] && [ -z "${BATS_TEST_NAME:-}" ] && [ -z "${CI:-}" ]; then
+    gum confirm "$message" && return 0 || return 1
+  fi
+
+  echo "  Re-run with --yes to confirm." >&2
+  return 1
+}
+
 # ── Manifest operations ──────────────────────────────────────
 #
 # Manifest format: tab-separated lines, sorted by name.

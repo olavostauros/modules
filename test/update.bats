@@ -132,6 +132,22 @@ setup() {
   [[ "$output" != *"unrelated.txt"* ]]
 }
 
+@test "update --yes commits manifest changes" {
+  modules add "$REMOTE" --name my-repo
+  git -C "$PARENT" commit -m "add module"
+
+  echo "yes change" > "$REMOTE/yes.md"
+  git -C "$REMOTE" add yes.md
+  git -C "$REMOTE" commit -m "yes update"
+
+  run modules update my-repo --yes
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"deps: update my-repo module pin"* ]]
+
+  run git -C "$PARENT" status --short
+  [ -z "$output" ]
+}
+
 @test "update reports already up to date" {
   modules add "$REMOTE" --name my-repo
 

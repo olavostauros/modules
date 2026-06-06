@@ -2,6 +2,7 @@
 #MISE description="Remove a module"
 #MISE dir="{{config_root}}"
 #USAGE arg "<name>" help="Module name to remove"
+#USAGE flag "-y --yes" default=#false help="Skip confirmation"
 set -euo pipefail
 
 source "$MISE_CONFIG_ROOT/lib/common.sh"
@@ -15,6 +16,8 @@ if ! manifest_has "$name"; then
   echo "Error: module '$name' not found" >&2
   exit 1
 fi
+
+confirm_or_require_yes "Remove module '$name'?" || exit 1
 
 mod_path="$(module_path "$name")"
 
