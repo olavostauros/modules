@@ -69,11 +69,17 @@ decrypt_if_needed() {
 write_success_result() {
   local plaintext="$1"
   if is_gitcrypt_file "$ANCESTOR" || is_gitcrypt_file "$OURS" || is_gitcrypt_file "$THEIRS"; then
-    if ! git-crypt clean < "$plaintext" > "$OURS" 2>/dev/null; then
+    local ours_dir ours_base cleaned
+    ours_dir=$(dirname "$OURS")
+    ours_base=$(basename "$OURS")
+    cleaned=$(mktemp "$ours_dir/.${ours_base}.clean.XXXXXX") || return 1
+    if ! git-crypt clean < "$plaintext" > "$cleaned" 2>/dev/null; then
+      rm -f "$cleaned"
       echo "modules manifest-merge-driver: git-crypt clean failed — is this a git-crypt repo?" >&2
       echo "modules manifest-merge-driver: aborting merge to avoid committing a plaintext manifest." >&2
       return 1
     fi
+    mv "$cleaned" "$OURS"
   else
     cp "$plaintext" "$OURS"
   fi
