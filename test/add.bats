@@ -83,6 +83,20 @@ setup() {
   [[ "$output" != *"160000"* ]]
 }
 
+@test "add without --name ignores inherited usage_name" {
+  export usage_name=quick-hooks-lifecycle
+
+  run modules add "$REMOTE"
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"Added module 'remote'"* ]]
+  [[ "$output" != *"quick-hooks-lifecycle"* ]]
+
+  [ -d "$PARENT/modules/remote" ]
+  [ ! -e "$PARENT/modules/quick-hooks-lifecycle" ]
+  manifest_has_name "$PARENT/.modules/manifest" "remote"
+  ! manifest_has_name "$PARENT/.modules/manifest" "quick-hooks-lifecycle"
+}
+
 @test "add with --name uses custom name" {
   run modules add "$REMOTE" --name my-dep
   [ "$status" -eq 0 ]

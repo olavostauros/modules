@@ -2,9 +2,9 @@
 #MISE description="Add a submodule"
 #MISE dir="{{config_root}}"
 #USAGE arg "<url>" help="Git URL of the repo to add"
-#USAGE flag "--name <name>" help="Module name (default: derived from URL)"
-#USAGE flag "--ref <ref>" help="Git ref to pin (default: HEAD)"
-#USAGE flag "--track <branch>" help="Track this branch during init/update while retaining a pinned SHA"
+#USAGE flag "--name <name>" default="" help="Module name (default: derived from URL)"
+#USAGE flag "--ref <ref>" default="" help="Git ref to pin (default: HEAD)"
+#USAGE flag "--track <branch>" default="" help="Track this branch during init/update while retaining a pinned SHA"
 set -euo pipefail
 
 source "$MISE_CONFIG_ROOT/lib/common.sh"

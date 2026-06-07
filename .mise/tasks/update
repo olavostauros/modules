@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 #MISE description="Pull latest, update module pin(s), and optionally commit"
 #MISE dir="{{config_root}}"
-#USAGE arg "[name]" help="Module name (omit to update all)"
-#USAGE flag "--commit" help="Commit manifest pin changes after updating"
+#USAGE arg "[name]" default="" help="Module name (omit to update all)"
+#USAGE flag "--commit" default=#false help="Commit manifest pin changes after updating"
 set -euo pipefail
 
 source "$MISE_CONFIG_ROOT/lib/common.sh"

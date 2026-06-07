@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 #MISE description="Clone modules and refresh tracked clones from their branch"
 #MISE dir="{{config_root}}"
-#USAGE arg "[names]..." var=#true help="Module names to initialize (omit to initialize all)"
+#USAGE arg "[names]..." default="" var=#true help="Module names to initialize (omit to initialize all)"
 set -euo pipefail
 
 source "$MISE_CONFIG_ROOT/lib/common.sh"

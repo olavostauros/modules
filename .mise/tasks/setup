@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 #MISE description="Initialize modules in the current repo"
 #MISE dir="{{config_root}}"
-#USAGE flag "--path <path>" help="Clone-root path relative to repo (default: modules)"
-#USAGE flag "--gpg-key <fingerprint>" var=#true help="GPG key fingerprint(s) to add as collaborators"
+#USAGE flag "--path <path>" default="" help="Clone-root path relative to repo (default: modules)"
+#USAGE flag "--gpg-key <fingerprint>" default="" var=#true help="GPG key fingerprint(s) to add as collaborators"
 set -euo pipefail
 
 source "$MISE_CONFIG_ROOT/lib/common.sh"
@@ -84,6 +84,7 @@ fi
 keys=()
 if [ -n "${usage_gpg_key:-}" ]; then
   while IFS= read -r key; do
+    [ -z "$key" ] && continue
     keys+=("$key")
   done < <(printf '%s' "${usage_gpg_key}" | xargs printf '%s\n')
 fi

@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 #MISE description="Run BATS tests"
 #MISE dir="{{config_root}}"
-#USAGE arg "[args]" var=#true help="Test suites or bats arguments"
+#USAGE arg "[args]" default="" var=#true help="Test suites or bats arguments"
 #USAGE example "mise run test" header="Run all tests"
 #USAGE example "mise run test init" header="Run a specific suite by name"
 #USAGE example "mise run test -- --filter refuses" header="Filter tests by name"
@@ -12,6 +12,7 @@ TEST_DIR="$MISE_CONFIG_ROOT/test"
 args=()
 if [ -n "${usage_args:-}" ]; then
   while IFS= read -r arg; do
+    [ -z "$arg" ] && continue
     args+=("$arg")
   done < <(printf '%s' "${usage_args}" | xargs printf '%s\n')
 fi
