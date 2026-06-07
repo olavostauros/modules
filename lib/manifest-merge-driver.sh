@@ -39,17 +39,23 @@ trap 'rm -rf "$WORK"' EXIT
 # smudge filter. If smudge fails (repo locked, git-crypt missing), abort —
 # producing a corrupt merged manifest silently would be much worse than
 # leaving git to raise a conflict.
+is_gitcrypt_file() {
+  local src="$1"
+  [ -s "$src" ] || return 1
+  # git-crypt files begin with \0 G I T C R Y P T \0 (10 bytes).
+  # Bash strings can't carry a leading \0 — read bytes 2-9 and check for "GITCRYPT".
+  local header
+  header=$(dd if="$src" bs=1 skip=1 count=8 2>/dev/null)
+  [ "$header" = "GITCRYPT" ]
+}
+
 decrypt_if_needed() {
   local src="$1" dst="$2"
   if [ ! -s "$src" ]; then
     : > "$dst"
     return 0
   fi
-  # git-crypt files begin with \0 G I T C R Y P T \0 (10 bytes).
-  # Bash strings can't carry a leading \0 — read bytes 2-9 and check for "GITCRYPT".
-  local header
-  header=$(dd if="$src" bs=1 skip=1 count=8 2>/dev/null)
-  if [ "$header" = "GITCRYPT" ]; then
+  if is_gitcrypt_file "$src"; then
     if ! git-crypt smudge < "$src" > "$dst" 2>/dev/null; then
       echo "modules manifest-merge-driver: git-crypt smudge failed on $src — is the repo unlocked?" >&2
       echo "modules manifest-merge-driver: aborting merge to avoid producing a corrupt manifest." >&2
@@ -57,6 +63,25 @@ decrypt_if_needed() {
     fi
   else
     cp "$src" "$dst"
+  fi
+}
+
+write_success_result() {
+  local plaintext="$1"
+  if is_gitcrypt_file "$ANCESTOR" || is_gitcrypt_file "$OURS" || is_gitcrypt_file "$THEIRS"; then
+    local ours_dir ours_base cleaned
+    ours_dir=$(dirname "$OURS")
+    ours_base=$(basename "$OURS")
+    cleaned=$(mktemp "$ours_dir/.${ours_base}.clean.XXXXXX") || return 1
+    if ! git-crypt clean < "$plaintext" > "$cleaned" 2>/dev/null; then
+      rm -f "$cleaned"
+      echo "modules manifest-merge-driver: git-crypt clean failed — is this a git-crypt repo?" >&2
+      echo "modules manifest-merge-driver: aborting merge to avoid committing a plaintext manifest." >&2
+      return 1
+    fi
+    mv "$cleaned" "$OURS"
+  else
+    cp "$plaintext" "$OURS"
   fi
 }
 
@@ -329,10 +354,13 @@ esac
 # all_names is already sorted, and the awk pass emits in the same order,
 # so $WORK/merged is sorted by construction. Sort once more as a
 # defense-in-depth pass in case a future awk change reorders.
-sort -t$'\t' -k1,1 "$WORK/merged" > "$OURS"
+sort -t$'\t' -k1,1 "$WORK/merged" > "$WORK/result"
 
 if [ "$has_conflict" = true ]; then
+  cp "$WORK/result" "$OURS"
   cat "$WORK/conflicts" >> "$OURS"
   exit 1
 fi
+
+write_success_result "$WORK/result"
 exit 0

@@ -290,6 +290,83 @@ set_pin() {
   [ -z "$sorted" ]
 }
 
+@test "merge-driver re-encrypts successful git-crypt manifest output" {
+  skip_unless_git_crypt
+
+  local ancestor_plain="$BATS_TEST_TMPDIR/ancestor.txt"
+  local ours_plain="$BATS_TEST_TMPDIR/ours.txt"
+  local theirs_plain="$BATS_TEST_TMPDIR/theirs.txt"
+  local ancestor_enc="$BATS_TEST_TMPDIR/ancestor.enc"
+  local ours_enc="$BATS_TEST_TMPDIR/ours.enc"
+  local theirs_enc="$BATS_TEST_TMPDIR/theirs.enc"
+  local merged_plain="$BATS_TEST_TMPDIR/merged.txt"
+  local expected="$BATS_TEST_TMPDIR/expected.txt"
+
+  printf 'alpha\t%s\t%s\n' "$REMOTE_A" "$(repo_head "$REMOTE_A")" > "$ancestor_plain"
+  cp "$ancestor_plain" "$ours_plain"
+  printf 'beta\t%s\t%s\n' "$REMOTE_B" "$(repo_head "$REMOTE_B")" >> "$ours_plain"
+  cp "$ancestor_plain" "$theirs_plain"
+  printf 'gamma\t%s\t%s\n' "$REMOTE_B" "$(repo_head "$REMOTE_B")" >> "$theirs_plain"
+
+  (cd "$PARENT" && git-crypt clean < "$ancestor_plain" > "$ancestor_enc")
+  (cd "$PARENT" && git-crypt clean < "$ours_plain" > "$ours_enc")
+  (cd "$PARENT" && git-crypt clean < "$theirs_plain" > "$theirs_enc")
+
+  (cd "$PARENT" && bash "$REPO_DIR/lib/manifest-merge-driver.sh" "$ancestor_enc" "$ours_enc" "$theirs_enc")
+
+  local header
+  header="$(dd if="$ours_enc" bs=1 skip=1 count=8 2>/dev/null)"
+  [ "$header" = "GITCRYPT" ]
+
+  (cd "$PARENT" && git-crypt smudge < "$ours_enc" > "$merged_plain")
+  {
+    cat "$ancestor_plain"
+    printf 'beta\t%s\t%s\n' "$REMOTE_B" "$(repo_head "$REMOTE_B")"
+    printf 'gamma\t%s\t%s\n' "$REMOTE_B" "$(repo_head "$REMOTE_B")"
+  } | sort -t$'\t' -k1,1 > "$expected"
+
+  diff -u "$expected" "$merged_plain"
+}
+
+@test "merge-driver leaves current side intact when git-crypt clean fails" {
+  local fake_bin="$BATS_TEST_TMPDIR/fake-bin"
+  local ancestor_plain="$BATS_TEST_TMPDIR/ancestor.txt"
+  local ours_plain="$BATS_TEST_TMPDIR/ours.txt"
+  local theirs_plain="$BATS_TEST_TMPDIR/theirs.txt"
+  local ancestor_enc="$BATS_TEST_TMPDIR/ancestor.enc"
+  local ours_enc="$BATS_TEST_TMPDIR/ours.enc"
+  local theirs_enc="$BATS_TEST_TMPDIR/theirs.enc"
+  local original_ours="$BATS_TEST_TMPDIR/original-ours.enc"
+
+  mkdir -p "$fake_bin"
+  cat > "$fake_bin/git-crypt" <<'EOF'
+#!/usr/bin/env bash
+case "$1" in
+  smudge) dd bs=1 skip=10 2>/dev/null ;;
+  clean) exit 7 ;;
+  *) exit 99 ;;
+esac
+EOF
+  chmod +x "$fake_bin/git-crypt"
+
+  printf 'alpha\t%s\t%s\n' "$REMOTE_A" "$(repo_head "$REMOTE_A")" > "$ancestor_plain"
+  cp "$ancestor_plain" "$ours_plain"
+  printf 'beta\t%s\t%s\n' "$REMOTE_B" "$(repo_head "$REMOTE_B")" >> "$ours_plain"
+  cp "$ancestor_plain" "$theirs_plain"
+  printf 'gamma\t%s\t%s\n' "$REMOTE_B" "$(repo_head "$REMOTE_B")" >> "$theirs_plain"
+
+  { printf '\0GITCRYPT\0'; cat "$ancestor_plain"; } > "$ancestor_enc"
+  { printf '\0GITCRYPT\0'; cat "$ours_plain"; } > "$ours_enc"
+  { printf '\0GITCRYPT\0'; cat "$theirs_plain"; } > "$theirs_enc"
+  cp "$ours_enc" "$original_ours"
+
+  run env PATH="$fake_bin:$PATH" bash "$REPO_DIR/lib/manifest-merge-driver.sh" \
+    "$ancestor_enc" "$ours_enc" "$theirs_enc"
+  [ "$status" -ne 0 ]
+  [[ "$output" == *"git-crypt clean failed"* ]]
+  cmp "$original_ours" "$ours_enc"
+}
+
 # ── install-hooks task ─────────────────────────────────────────
 
 @test "install-hooks registers merge driver in git config" {
