@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-#MISE description="Install git merge driver for the modules manifest"
+#MISE description="Install all git hooks (pre-commit guards + merge driver)"
 #MISE dir="{{config_root}}"
 set -euo pipefail
 
@@ -7,6 +7,27 @@ source "$MISE_CONFIG_ROOT/lib/common.sh"
 source "$MISE_CONFIG_ROOT/lib/hooks.sh"
 
 require_git
+
+# ── Pre-commit hooks ──────────────────────────────────────────
+
+HOOKS_SRC="$MISE_CONFIG_ROOT/hooks"
+HOOKS_DST="$TARGET_DIR/.git/hooks"
+
+if [ ! -x "$HOOKS_DST/pre-commit" ]; then
+  cp "$HOOKS_SRC/dispatcher" "$HOOKS_DST/pre-commit"
+  chmod +x "$HOOKS_DST/pre-commit"
+fi
+
+mkdir -p "$HOOKS_DST/pre-commit.d"
+for hook in gitmodules-guard manifest-encryption; do
+  cp "$HOOKS_SRC/$hook" "$HOOKS_DST/pre-commit.d/$hook"
+  chmod +x "$HOOKS_DST/pre-commit.d/$hook"
+done
+
+rm -f "$HOOKS_DST/pre-commit.d/path-obfuscation"
+
+# ── Manifest merge driver ────────────────────────────────
+# Required to safely merge concurrent pin bumps (notes#48-class bug).
 
 install_manifest_merge_driver
 
@@ -16,6 +37,6 @@ install_manifest_merge_driver
 # real failures rather than swallowing them.
 git -C "$TARGET_DIR" add "$TARGET_DIR/.gitattributes"
 
-echo "Installed merge driver for .modules/manifest"
-echo "  git config:    merge.modules-manifest.driver"
-echo "  .gitattributes: .modules/manifest merge=modules-manifest"
+echo "Installed hooks + merge driver for modules"
+echo "  hooks:      pre-commit dispatcher + 2 guards"
+echo "  merge:      .modules/manifest (union merge driver)"

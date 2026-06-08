@@ -101,7 +101,7 @@ What a public observer sees on GitHub (locked):
 | -------------------------------------------------------------------- | ------------------------------------------------------------------------- |
 | `modules add <url> [--name <name>] [--ref <ref>] [--track <branch>]` | Add a submodule                                                           |
 | `modules init [names]...`                                            | Clone modules and refresh tracked clones from their branch                |
-| `modules install-hooks`                                              | Install git merge driver for the modules manifest                         |
+| `modules install-hooks`                                              | Install pre-commit guards and merge driver (idempotent repair command)    |
 | `modules list [--json]`                                              | List modules                                                              |
 | `modules lock`                                                       | Lock encrypted manifest (re-encrypt on disk)                              |
 | `modules ls [--json]`                                                | Alias for list                                                            |
@@ -139,7 +139,7 @@ modules/
 │   ├── update          # Pull latest, update pinned SHA, optionally commit
 │   ├── remove          # Clean removal of clone + manifest entry
 │   ├── lock / unlock   # Wrappers around rudi lock / unlock
-│   ├── install-hooks   # Register the merge driver (called by setup)
+│   ├── install-hooks   # Install pre-commit guards + merge driver (idempotent repair)
 │   └── test            # Run BATS test suite
 ├── lib/
 │   ├── common.sh                  # Shared helpers, manifest ops

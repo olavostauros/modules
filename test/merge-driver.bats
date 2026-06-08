@@ -406,6 +406,83 @@ EOF
   [ "$output" = "1" ]
 }
 
+@test "install-hooks installs pre-commit dispatcher when missing" {
+  local fresh="$BATS_TEST_TMPDIR/fresh-no-dispatcher"
+  create_parent_repo "$fresh"
+  MODULES_CALLER_PWD="$fresh" modules setup
+  git -C "$fresh" commit -m "init modules"
+
+  # Remove dispatcher to simulate a broken state after upgrade
+  rm -f "$fresh/.git/hooks/pre-commit"
+  [ ! -x "$fresh/.git/hooks/pre-commit" ]
+
+  MODULES_CALLER_PWD="$fresh" modules install-hooks
+
+  [ -x "$fresh/.git/hooks/pre-commit" ]
+}
+
+@test "install-hooks installs guards when missing" {
+  local fresh="$BATS_TEST_TMPDIR/fresh-no-guards"
+  create_parent_repo "$fresh"
+  MODULES_CALLER_PWD="$fresh" modules setup
+  git -C "$fresh" commit -m "init modules"
+
+  # Remove guards to simulate a broken state
+  rm -f "$fresh/.git/hooks/pre-commit.d/gitmodules-guard"
+  rm -f "$fresh/.git/hooks/pre-commit.d/manifest-encryption"
+
+  MODULES_CALLER_PWD="$fresh" modules install-hooks
+
+  [ -x "$fresh/.git/hooks/pre-commit.d/gitmodules-guard" ]
+  [ -x "$fresh/.git/hooks/pre-commit.d/manifest-encryption" ]
+}
+
+@test "install-hooks preserves existing custom pre-commit dispatcher" {
+  local fresh="$BATS_TEST_TMPDIR/fresh-custom-hook"
+  create_parent_repo "$fresh"
+  mkdir -p "$fresh/.git/hooks/pre-commit.d"
+
+  # Create a custom pre-commit dispatcher
+  cat > "$fresh/.git/hooks/pre-commit" <<'DISPATCH'
+#!/usr/bin/env bash
+for hook in "$(dirname "$0")/pre-commit.d"/*; do
+  [ -x "$hook" ] && "$hook" || exit $?
+done
+DISPATCH
+  chmod +x "$fresh/.git/hooks/pre-commit"
+
+  echo "custom hook content" > "$fresh/.git/hooks/pre-commit.d/existing-hook"
+  chmod +x "$fresh/.git/hooks/pre-commit.d/existing-hook"
+
+  export MODULES_CALLER_PWD="$fresh"
+  modules install-hooks
+
+  # Custom hook content should not have been touched
+  run cat "$fresh/.git/hooks/pre-commit"
+  [[ "$output" == *"pre-commit.d"* ]]
+  # Custom hook in pre-commit.d should still be there
+  [ -x "$fresh/.git/hooks/pre-commit.d/existing-hook" ]
+}
+
+@test "install-hooks removes obsolete path-obfuscation hook" {
+  local fresh="$BATS_TEST_TMPDIR/fresh-stale-hook"
+  create_parent_repo "$fresh"
+  MODULES_CALLER_PWD="$fresh" modules setup
+  git -C "$fresh" commit -m "init modules"
+
+  # Simulate the old path-obfuscation hook being present
+  cat > "$fresh/.git/hooks/pre-commit.d/path-obfuscation" <<'EOF'
+#!/usr/bin/env bash
+exit 0
+EOF
+  chmod +x "$fresh/.git/hooks/pre-commit.d/path-obfuscation"
+  [ -f "$fresh/.git/hooks/pre-commit.d/path-obfuscation" ]
+
+  MODULES_CALLER_PWD="$fresh" modules install-hooks
+
+  [ ! -e "$fresh/.git/hooks/pre-commit.d/path-obfuscation" ]
+}
+
 @test "setup installs merge driver by default" {
   # setup ran in the setup() function; driver should already be installed.
   # (Note: bats setup() rewrites the driver to a local path for test
