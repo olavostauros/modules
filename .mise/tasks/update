@@ -41,7 +41,7 @@ default_branch_for() {
 sync_untracked_module() {
   local name="$1" mod_path="$2" default_branch
 
-  assert_module_clean "$name" "$mod_path" "pull default branch" || return 1
+  assert_module_clean "$name" "$mod_path" "pull default branch" tracked-only || return 1
 
   if ! git -C "$mod_path" fetch -q origin 2>&1; then
     echo "  $name: fetch failed" >&2
