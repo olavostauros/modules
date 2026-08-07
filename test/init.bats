@@ -70,9 +70,9 @@ setup() {
   run modules init
   [ "$status" -eq 0 ]
 
-  # Should print a pinned status line with the short SHA (not the long advice block)
-  [[ "$output" == *"pinned "* ]]
-  [[ "$output" == *"my-repo"* ]]
+  local short_pin="${pin:0:12}"
+  [[ "$output" == *"  my-repo: pinned $short_pin"* ]]
+  [[ "$output" != *"HEAD is now at"* ]]
   [[ "$output" != *"Note: switching to"* ]]
   [[ "$output" != *"detached HEAD"* ]]
 }
@@ -83,11 +83,13 @@ setup() {
   # Use a SHA that doesn't exist in the remote
   local bad_pin="0000000000000000000000000000000000000000"
 
-  # Replace the pin in the manifest directly via awk (TSV: name<tab>url<tab>pin)
-  local url
-  url="$(manifest_url_of "$PARENT/.modules/manifest" "my-repo")"
-  awk -F'	' -v n="my-repo" -v u="$url" -v p="$bad_pin"     'BEGIN{OFS="	"} $1==n{$3=p} 1'     "$PARENT/.modules/manifest" > "$PARENT/.modules/manifest.tmp"
-  mv "$PARENT/.modules/manifest.tmp" "$PARENT/.modules/manifest"
+  local manifest="$PARENT/.modules/manifest"
+  awk -F $'\t' -v name="my-repo" -v pin="$bad_pin" '
+    BEGIN { OFS = "\t" }
+    $1 == name { $3 = pin }
+    { print }
+  ' "$manifest" > "$manifest.tmp"
+  mv "$manifest.tmp" "$manifest"
   git -C "$PARENT" add .modules/manifest
   git -C "$PARENT" commit -m "bad pin"
 
@@ -95,7 +97,9 @@ setup() {
 
   run modules init
   [ "$status" -ne 0 ]
-  [[ "$output" == *"fatal"* || "$output" == *"paths"* || "$output" == *"not a valid object"* ]]
+  [[ "$output" == *"fatal:"* ]]
+  [[ "$output" == *"$bad_pin"* ]]
+  [[ "$output" != *"my-repo: pinned"* ]]
 }
 
 @test "init skips already-cloned untracked modules" {
@@ -121,7 +125,10 @@ setup() {
 
   run modules init
   [ "$status" -eq 0 ]
-  [[ "$output" == *"tracking main"* ]]
+  [[ "$output" == *"  tracked: tracking main @ ${latest:0:12}"* ]]
+  [[ "$output" != *"HEAD is now at"* ]]
+  [[ "$output" != *"Switched to"* ]]
+  [[ "$output" != *"Already on"* ]]
 
   local actual pin_after branch upstream
   actual="$(repo_head "$PARENT/modules/tracked")"

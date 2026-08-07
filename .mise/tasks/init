@@ -108,7 +108,7 @@ while IFS=$'\t' read -r name url pin track; do
   if [ -n "$track" ]; then
     sync_to_track "$name" "$mod_path" "$track" || errors=$((errors + 1))
   else
-    git -C "$mod_path" -c advice.detachedHead=false checkout "$pin" 2>&1
+    git -C "$mod_path" checkout -q --detach "$pin" 2>&1
 
     actual="$(git -C "$mod_path" rev-parse HEAD)"
     if [ "$actual" != "$pin" ]; then
