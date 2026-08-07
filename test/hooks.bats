@@ -58,6 +58,51 @@ HOOK
   [ ! -e "$PARENT/.git/hooks/pre-commit.d/path-obfuscation" ]
 }
 
+@test "setup warns when preserved pre-commit does not dispatch pre-commit.d" {
+  local fresh="$BATS_TEST_TMPDIR/no-dispatch"
+  local existing_hook="$fresh/.git/hooks/pre-commit"
+  local guards_dir="$fresh/.git/hooks/pre-commit.d"
+  create_parent_repo "$fresh"
+  cat > "$existing_hook" <<'EOF'
+#!/usr/bin/env bash
+echo "my custom hook"
+EOF
+  chmod +x "$existing_hook"
+
+  export MODULES_CALLER_PWD="$fresh"
+  run modules setup
+
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"Warning: preserved existing pre-commit hook:"* ]]
+  [[ "$output" == *"$existing_hook"* ]]
+  [[ "$output" == *"does not appear to dispatch pre-commit.d/"* ]]
+  [[ "$output" == *"Modules guards were installed in:"* ]]
+  [[ "$output" == *"$guards_dir/"* ]]
+  [[ "$output" == *"modules install-hooks"* ]]
+  [[ "$output" != *"mise run install-hooks"* ]]
+  grep -qF 'echo "my custom hook"' "$existing_hook"
+  [ -x "$guards_dir/gitmodules-guard" ]
+  [ -x "$guards_dir/manifest-encryption" ]
+}
+
+@test "setup quiet when preserved pre-commit dispatches pre-commit.d" {
+  local fresh="$BATS_TEST_TMPDIR/dispatches"
+  create_parent_repo "$fresh"
+  cat > "$fresh/.git/hooks/pre-commit" <<'DISPATCH'
+#!/usr/bin/env bash
+for hook in "$(dirname "$0")/pre-commit.d"/*; do
+  [ -x "$hook" ] && "$hook" || exit $?
+done
+DISPATCH
+  chmod +x "$fresh/.git/hooks/pre-commit"
+
+  export MODULES_CALLER_PWD="$fresh"
+  run modules setup
+
+  [ "$status" -eq 0 ]
+  [[ "$output" != *"Warning: preserved existing pre-commit hook:"* ]]
+}
+
 @test "setup removes obsolete path-obfuscation hook if present" {
   # Simulate upgrading from an old layout where path-obfuscation was installed
   cat > "$PARENT/.git/hooks/pre-commit.d/path-obfuscation" <<'EOF'

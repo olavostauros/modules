@@ -465,7 +465,7 @@ DISPATCH
   [ -x "$fresh/.git/hooks/pre-commit.d/existing-hook" ]
 }
 
-@test "install-hooks works from a linked worktree" {
+@test "install-hooks warns about a preserved non-dispatcher from a linked worktree" {
   local primary="$BATS_TEST_TMPDIR/linked-primary"
   local linked="$BATS_TEST_TMPDIR/linked-worktree"
   create_parent_repo "$primary"
@@ -474,11 +474,23 @@ DISPATCH
   local common_hooks
   common_hooks="$(git -C "$primary" rev-parse --absolute-git-dir)/hooks"
   rm -rf "$common_hooks/pre-commit" "$common_hooks/pre-commit.d"
+  mkdir -p "$common_hooks"
+  cat > "$common_hooks/pre-commit" <<'HOOK'
+#!/usr/bin/env bash
+echo "linked custom hook"
+HOOK
+  chmod +x "$common_hooks/pre-commit"
   [ -f "$linked/.git" ]
 
-  MODULES_CALLER_PWD="$linked" modules install-hooks
+  export MODULES_CALLER_PWD="$linked"
+  run modules install-hooks
 
-  [ -x "$common_hooks/pre-commit" ]
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"Warning: preserved existing pre-commit hook:"* ]]
+  [[ "$output" == *"$common_hooks/pre-commit"* ]]
+  [[ "$output" == *"does not appear to dispatch pre-commit.d/"* ]]
+  [[ "$output" == *"modules install-hooks"* ]]
+  grep -qF 'echo "linked custom hook"' "$common_hooks/pre-commit"
   [ -x "$common_hooks/pre-commit.d/gitmodules-guard" ]
   [ -x "$common_hooks/pre-commit.d/manifest-encryption" ]
   [ ! -d "$linked/.git/hooks" ]

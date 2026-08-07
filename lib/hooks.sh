@@ -12,15 +12,18 @@ git_common_dir_abs() {
 }
 
 install_pre_commit_hooks() {
-  local hooks_src hooks_dst hook lib_dir
+  local hooks_src hooks_dst hook lib_dir preserved_hook
   lib_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
   hooks_src="$(cd "$lib_dir/../hooks" && pwd)"
   hooks_dst="$(git_common_dir_abs)/hooks"
+  preserved_hook=""
 
   if [ ! -x "$hooks_dst/pre-commit" ]; then
     mkdir -p "$hooks_dst"
     cp "$hooks_src/dispatcher" "$hooks_dst/pre-commit"
     chmod +x "$hooks_dst/pre-commit"
+  elif ! grep -q 'pre-commit\.d' "$hooks_dst/pre-commit" 2>/dev/null; then
+    preserved_hook="$hooks_dst/pre-commit"
   fi
 
   mkdir -p "$hooks_dst/pre-commit.d"
@@ -30,6 +33,17 @@ install_pre_commit_hooks() {
   done
 
   rm -f "$hooks_dst/pre-commit.d/path-obfuscation"
+
+  if [ -n "$preserved_hook" ]; then
+    echo "Warning: preserved existing pre-commit hook:" >&2
+    echo "  $preserved_hook" >&2
+    echo "It does not appear to dispatch pre-commit.d/. Modules guards were installed in:" >&2
+    echo "  $hooks_dst/pre-commit.d/" >&2
+    echo "They may not run until the existing hook invokes them." >&2
+    echo "To use the default dispatcher, remove or update the existing hook, then run:" >&2
+    echo "  modules install-hooks" >&2
+    echo "To keep the hook, update it to run executable files in pre-commit.d/." >&2
+  fi
 }
 
 # Install the manifest merge driver.
